@@ -3,7 +3,7 @@
 # and reports GB per month. A folder with a steady GB figure month after month is the
 # thing that refills the disk. Reparse points are skipped.
 #
-# Usage: .\Get-GrowthByMonth.ps1 -Root 'C:\Users\Axioo Pongo' -Depth 3
+# Usage: .\Get-GrowthByMonth.ps1 -Root 'C:\Users\<you>' -Depth 3
 #
 # NOTE: '|' is the key delimiter - it is illegal in Windows paths, so it can never
 # collide with a folder name. (An earlier version used a `u{0001} escape, which
