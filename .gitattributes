@@ -1,0 +1,10 @@
+# Shell scripts MUST stay LF. A CRLF shebang ("#!/usr/bin/env bash\r") fails on
+# Linux/macOS with "bad interpreter: No such file or directory" - which would
+# silently break this repo for exactly the cross-platform users it targets.
+*.sh    text eol=lf
+
+# PowerShell is fine either way; CRLF matches native Windows tooling.
+*.ps1   text eol=crlf
+
+# Everything else: normalize in the repo, let Git pick the working-copy ending.
+*       text=auto
