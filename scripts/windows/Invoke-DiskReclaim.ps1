@@ -1,4 +1,4 @@
-# Invoke-DiskReclaim.ps1 - reclaim the accumulators that never self-clean (Windows)
+﻿# Invoke-DiskReclaim.ps1 - reclaim the accumulators that never self-clean (Windows)
 #
 # SAFE BY DEFAULT: reports only. Nothing is removed unless you pass -Execute.
 #
@@ -45,7 +45,7 @@ $CacheTargets = @(
     @{ Label='CapCutCache';   Path="$env:LOCALAPPDATA\CapCut\User Data\Cache"; KeepDays=30 }
     @{ Label='ResolveCache';  Path="$env:LOCALAPPDATA\Blackmagic Design\DaVinci Resolve\CacheClip"; KeepDays=30 }
     @{ Label='PlaywrightOld'; Path="$env:LOCALAPPDATA\ms-playwright";          KeepDays=90 }
-    @{ Label='NpmCache';      Path="$env:LOCALAPPDATA\npm-cache";              KeepDays=60; Native='npm cache clean --force' }
+    @{ Label='NpmCache';      Path="$env:LOCALAPPDATA\npm-cache";              KeepDays=60; Native='npm cache clean --force'; AlsoPurge=@('_npx') }
     @{ Label='PipCache';      Path="$env:LOCALAPPDATA\pip\Cache";              KeepDays=60; Native='pip cache purge' }
 )
 
@@ -86,9 +86,17 @@ public class Walker
 {
     public class Entry { public string Path; public long Length; public DateTime MTime; }
 
+    // Number of directories the LAST Files() call could not read (access denied,
+    // path too long, ...). This is the DIRECT signal of an incomplete walk - read it
+    // immediately after Files(), before the next Files() call overwrites it. It is
+    // what lets the caller tell "correctly found nothing" (Skipped==0) from "the walk
+    // was cut short" (Skipped>0) without guessing from file counts.
+    public static long LastSkipped = 0;
+
     public static List<Entry> Files(string root)
     {
         var outp = new List<Entry>();
+        long skipped = 0;
         var stack = new Stack<string>();
         stack.Push(root);
         while (stack.Count > 0)
@@ -102,19 +110,20 @@ public class Walker
                         var e = new Entry();
                         e.Path = fi.FullName; e.Length = fi.Length; e.MTime = fi.LastWriteTime;
                         outp.Add(e);
-                    } catch { }
+                    } catch { skipped++; }
                 }
-            } catch { }
+            } catch { skipped++; }
             try {
                 foreach (string d in Directory.EnumerateDirectories(dir)) {
                     try {
                         var di = new DirectoryInfo(d);
                         if ((di.Attributes & FileAttributes.ReparsePoint) != 0) continue;
                         stack.Push(d);
-                    } catch { }
+                    } catch { skipped++; }
                 }
-            } catch { }
+            } catch { skipped++; }
         }
+        LastSkipped = skipped;
         return outp;
     }
 }
@@ -128,13 +137,24 @@ function Get-FreeGB { [math]::Round((Get-PSDrive C).Free / 1GB, 2) }
 function Want($n) { return (-not $Only) -or ($Only -contains $n) }
 
 function Remove-Set {
-    param([string]$Label, [object[]]$Files, [double]$FolderTotalGB = -1)
+    param([string]$Label, [object[]]$Files, [int]$RawCount = -1, [long]$Skipped = 0)
 
     if (-not $Files -or $Files.Count -eq 0) {
-        # Distinguish "genuinely clean" from "the walk failed".
-        if ($FolderTotalGB -gt 1) {
-            Write-Warning ("   0 files matched but folder holds {0} GB - enumeration is SUSPECT, not clean" -f $FolderTotalGB)
-        } else { Write-Host "   nothing to reclaim" }
+        # An empty delete list has three causes; only the first is a fault. We use the
+        # walk's OWN report of how many entries it could not read (Skipped), not a guess
+        # from file counts - that is what previously false-alarmed on "all files recent"
+        # and again on "folder of empty subdirs".
+        #   Skipped > 0            -> the walk was cut short (denied / long path) - the
+        #                             Get-ChildItem-returned-0-on-22GB trap, made visible
+        #   RawCount > 0           -> walk found files, none matched the age filter - fine
+        #   RawCount = 0, Skipped 0 -> genuinely nothing to reclaim
+        if ($Skipped -gt 0) {
+            Write-Warning ("   walk could not read {0} entr(ies) (access denied / path too long) - result may be INCOMPLETE, not clean" -f $Skipped)
+        } elseif ($RawCount -gt 0) {
+            Write-Host "   nothing old enough to reclaim (all files newer than the cutoff)"
+        } else {
+            Write-Host "   nothing to reclaim"
+        }
         return
     }
 
@@ -260,6 +280,7 @@ if (Want 'Caches') {
         if (-not (Test-Path $t.Path)) { continue }
         Write-Host ("-- {0}  ({1})" -f $t.Label, $t.Path)
         $all = [Walker]::Files($t.Path)
+        $skipped = [Walker]::LastSkipped   # read immediately - the next Files() call overwrites it
         $totalGB = [math]::Round((($all | Measure-Object Length -Sum).Sum / 1GB), 2)
         $cut = (Get-Date).AddDays(-$t.KeepDays)
 
@@ -269,21 +290,32 @@ if (Want 'Caches') {
             if (-not $Execute) {
                 Write-Host "   DRY RUN - pass -Execute to act"
             } else {
-                $before = Get-FreeGB
+                $freeBefore = Get-FreeGB
                 try {
                     cmd /c "$($t.Native) >nul 2>&1"
-                    $freed = [math]::Round((Get-FreeGB) - $before, 2)
-                    Write-Host ("   done - {0} GB freed" -f $freed)
+                    # A native cleaner may only touch PART of its cache dir. npm's
+                    # `cache clean` clears _cacache but never _npx, so anything listed
+                    # in AlsoPurge is nuked wholesale here (all regenerable churn).
+                    foreach ($sub in @($t.AlsoPurge)) {
+                        if (-not $sub) { continue }
+                        $subPath = Join-Path $t.Path $sub
+                        if (Test-Path -LiteralPath $subPath) {
+                            try { [System.IO.Directory]::Delete($subPath, $true) }
+                            catch { Write-Warning ("   could not purge {0}: {1}" -f $subPath, $_.Exception.Message) }
+                        }
+                    }
+                    $freed = [math]::Round((Get-FreeGB) - $freeBefore, 2)
+                    Write-Host ("   done - {0} GB freed{1}" -f $freed, $(if ($t.AlsoPurge) { " (incl. $($t.AlsoPurge -join ', '))" } else { '' }))
                 } catch {
                     Write-Warning ("   native cleaner failed ({0}) - falling back to file-by-file" -f $_.Exception.Message)
-                    Remove-Set -Label $t.Label -Files ($all | Where-Object { $_.MTime -lt $cut }) -FolderTotalGB $totalGB
+                    Remove-Set -Label $t.Label -Files ($all | Where-Object { $_.MTime -lt $cut }) -RawCount $all.Count -Skipped $skipped
                 }
             }
             continue
         }
 
         Write-Host ("   {0} files / {1} GB; keeping newer than {2:yyyy-MM-dd}" -f $all.Count, $totalGB, $cut)
-        Remove-Set -Label $t.Label -Files ($all | Where-Object { $_.MTime -lt $cut }) -FolderTotalGB $totalGB
+        Remove-Set -Label $t.Label -Files ($all | Where-Object { $_.MTime -lt $cut }) -RawCount $all.Count -Skipped $skipped
     }
 }
 
