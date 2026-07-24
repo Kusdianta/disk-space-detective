@@ -6,6 +6,90 @@ Works on **Windows, macOS, and Linux**.
 
 ---
 
+# ▶ Run it
+
+One paste. Read-only — **it does not delete anything**. Takes about 25 seconds.
+
+**Windows** (PowerShell):
+
+```bash
+git clone -q https://github.com/Kusdianta/disk-space-detective "$env:TEMP\dsd"; powershell -ExecutionPolicy Bypass -File "$env:TEMP\dsd\scripts\windows\Start-DiskDetective.ps1"
+```
+
+**macOS / Linux:**
+
+```bash
+git clone -q https://github.com/Kusdianta/disk-space-detective /tmp/dsd && bash /tmp/dsd/scripts/posix/disk-detective.sh --all
+```
+
+<details>
+<summary>No git installed? (Windows zip version)</summary>
+
+```bash
+irm https://github.com/Kusdianta/disk-space-detective/archive/refs/heads/main.zip -OutFile "$env:TEMP\dsd.zip"; Expand-Archive "$env:TEMP\dsd.zip" "$env:TEMP\dsd" -Force; powershell -ExecutionPolicy Bypass -File "$env:TEMP\dsd\disk-space-detective-main\scripts\windows\Start-DiskDetective.ps1"
+```
+</details>
+
+### What you get
+
+```
+  free     : 80.75 GB of 475.69 GB  (17% free)
+  status   : TIGHT - under 20% free
+
+== 1. KNOWN ACCUMULATORS   (max 8s each, results stream as they finish)
+
+       GB  TYPE     What
+    28.90  DATA     Docker WSL disk
+    15.07  DATA     Store/MSIX app data
+ >=  7.42  CACHE    Chrome profile+cache
+     2.92  RATCHET  MSI/MSP cache
+     2.15  RATCHET  Playwright browsers
+
+  total in known accumulators        : 81.33 GB
+    CACHE   (comes back after clearing): 10.20 GB
+    RATCHET (never shrinks on its own) :  5.07 GB
+```
+
+Every folder is labelled so you know what you're looking at:
+
+| | |
+|---|---|
+| **RATCHET** | Grows monthly, never shrinks. **This is what's actually eating your disk.** |
+| **CACHE** | Safe to clear, but it comes back. Clearing it is not a fix. |
+| **DATA** | Real data. Don't touch. |
+
+`>=` means the probe hit its time cap — that folder is *at least* that big. A floor, never a falsely-small number.
+
+### ⚠ Run it as Administrator / with sudo
+
+Without it, `C:\Windows\Installer` is unreadable — and that's the most common hidden hoard on Windows (it was **41 GB** in the case that produced this tool). The script tells you it skipped it rather than implying all-clear.
+
+### Then what?
+
+It ends by printing your next command. Cleanup is always a separate, explicit step:
+
+```bash
+.\Invoke-DiskReclaim.ps1
+```
+
+That **previews** what it would remove and changes nothing. Add `-Execute` to actually act, or `-Quarantine D:\Held` to move files instead of deleting them.
+
+| Command | What it does |
+|---|---|
+| `Start-DiskDetective.ps1` | **Start here.** Read-only, ~25s. Probes the ~25 known accumulators. |
+| `Start-DiskDetective.ps1 -Full` | Exhaustive: ranks every folder + growth-by-month. Minutes, not seconds. |
+| `Invoke-DiskReclaim.ps1` | Cleanup. Dry-run by default. |
+
+**Using it with Claude Code / Claude Desktop instead?**
+
+```bash
+git clone https://github.com/Kusdianta/disk-space-detective ~/.claude/skills/disk-space-detective
+```
+
+Then just ask: *"my C: drive keeps filling up, find out why"*
+
+---
+
 ## Why this exists
 
 Disk cleaners only remove what they already know about. This skill is for the other case:
@@ -53,48 +137,6 @@ Invisible to Disk Cleanup. Invisible to every third-party cleaner. Which is exac
 Also found along the way: 22.4 GB of video-editor cache with nothing newer than three months, and 2.25 GB of stale VM bundles.
 
 And one hypothesis **falsified by measurement** — "old Electron app versions piling up" looked obvious and accounted for only 2.27 GB. Ruling a suspect out is a real result.
-
-## Quick start
-
-**Windows** — paste this into PowerShell. Clones to a temp folder and runs a read-only scan (~30s). Nothing is deleted:
-
-```bash
-git clone -q https://github.com/Kusdianta/disk-space-detective "$env:TEMP\dsd"; powershell -ExecutionPolicy Bypass -File "$env:TEMP\dsd\scripts\windows\Start-DiskDetective.ps1"
-```
-
-No git on the machine? Same thing via zip:
-
-```bash
-irm https://github.com/Kusdianta/disk-space-detective/archive/refs/heads/main.zip -OutFile "$env:TEMP\dsd.zip"; Expand-Archive "$env:TEMP\dsd.zip" "$env:TEMP\dsd" -Force; powershell -ExecutionPolicy Bypass -File "$env:TEMP\dsd\disk-space-detective-main\scripts\windows\Start-DiskDetective.ps1"
-```
-
-**macOS / Linux:**
-
-```bash
-git clone -q https://github.com/Kusdianta/disk-space-detective /tmp/dsd && bash /tmp/dsd/scripts/posix/disk-detective.sh --all
-```
-
-That's the whole first run. It prints where your space went, what's *accumulating* versus merely large, and the exact command to preview a cleanup.
-
-> **Run it elevated / with sudo for the full picture.** On Windows, `C:\Windows\Installer` — the most common hidden hoard — is unreadable without admin, and the script says so rather than implying a clean result.
-
-### The three commands
-
-| | |
-|---|---|
-| `Start-DiskDetective.ps1` | **Start here.** Read-only diagnosis, ~30s. Probes the ~25 known accumulators. |
-| `Start-DiskDetective.ps1 -Full` | Exhaustive: ranks every folder + growth-by-month. Minutes, not seconds. |
-| `Invoke-DiskReclaim.ps1` | Cleanup. **Dry-run by default** — add `-Execute` to act, `-Quarantine <path>` to move instead of delete. |
-
-Quick mode time-boxes each probe (`-ProbeSeconds`, default 8). A folder that hits the cap is reported as `>= X GB` — a floor, never a falsely-small number.
-
-**As a Claude Code / Claude Desktop skill:**
-
-```bash
-git clone https://github.com/Kusdianta/disk-space-detective ~/.claude/skills/disk-space-detective
-```
-
-Then just ask: *"my C: drive keeps filling up, find out why"*
 
 ## What's in the box
 
