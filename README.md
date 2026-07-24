@@ -1,44 +1,168 @@
-# Disk Space Detective
+<div align="center">
 
-Finds what is **silently** filling a disk, proves it by measurement, and installs a permanent fix.
+# 🔍 Disk Space Detective
 
-**Plain PowerShell and bash scripts. No AI, no account, no network, no install.** They run offline on a stock Windows, macOS, or Linux machine and never phone home.
+### Find what is **secretly** eating your disk — and stop it coming back
+### Cari tahu apa yang **diam-diam** memakan disk kamu — dan hentikan selamanya
 
-If you *do* use Claude Code or Claude Desktop, it also works as an [Agent Skill](https://docs.claude.com/en/docs/agents-and-tools/agent-skills/overview) — but that is entirely optional and nothing here depends on it.
+<br>
+
+![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?style=for-the-badge&logo=windows&logoColor=white)
+![macOS](https://img.shields.io/badge/macOS-000000?style=for-the-badge&logo=apple&logoColor=white)
+![Linux](https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black)
+
+![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
+![No install](https://img.shields.io/badge/install-none%20needed-success?style=flat-square)
+![Offline](https://img.shields.io/badge/100%25%20offline-no%20AI%20·%20no%20account-blueviolet?style=flat-square)
+![Safe](https://img.shields.io/badge/dry--run-by%20default-orange?style=flat-square)
+![Stars](https://img.shields.io/github/stars/Kusdianta/disk-space-detective?style=flat-square)
+
+<br>
+
+**🏆 Real results / Hasil nyata**
+
+| | Before | After | Freed |
+|:--|:--:|:--:|:--:|
+| 💻 PC #1 | `16.7 GB` free | `82.1 GB` free | **`+65 GB`** |
+| 💻 PC #2 | `10.8 GB` free | `50.1 GB` free | **`+39 GB`** |
+
+</div>
 
 ---
 
-# ▶ Run it
+# 🚀 How to use — 3 steps / Cara pakai — 3 langkah
 
-**Windows** — open PowerShell **as Administrator** and paste this. No git needed. It installs to `C:\Tools\DiskDetective` and runs a read-only scan (~30s). **It does not delete anything.**
+<table>
+<tr>
+<th width="50%">🇬🇧 English</th>
+<th width="50%">🇮🇩 Bahasa Indonesia</th>
+</tr>
+<tr valign="top">
+<td>
 
-```bash
+**1️⃣ Open PowerShell as Administrator**
+
+Press `Win`, type `powershell`, then right-click it and choose **Run as Administrator**.
+
+</td>
+<td>
+
+**1️⃣ Buka PowerShell sebagai Administrator**
+
+Tekan `Win`, ketik `powershell`, lalu klik kanan dan pilih **Run as Administrator**.
+
+</td>
+</tr>
+<tr valign="top">
+<td>
+
+**2️⃣ Copy-paste this. Press Enter.**
+
+It installs itself and scans your disk. **It deletes nothing.** Takes about 30 seconds.
+
+</td>
+<td>
+
+**2️⃣ Copy-paste ini. Tekan Enter.**
+
+Otomatis terpasang lalu memindai disk. **Tidak menghapus apa pun.** Sekitar 30 detik.
+
+</td>
+</tr>
+</table>
+
+```powershell
 Set-ExecutionPolicy Bypass -Scope Process -Force; $z="$env:TEMP\dd.zip";$x="$env:TEMP\ddx";irm https://github.com/Kusdianta/disk-space-detective/archive/refs/heads/main.zip -OutFile $z;Remove-Item $x -Recurse -Force -EA 0;Expand-Archive $z $x -Force;& "$x\disk-space-detective-main\scripts\windows\Install-DiskDetective.ps1" -NoSchedule;& "C:\Tools\DiskDetective\Start-DiskDetective.ps1"
 ```
 
-Afterwards everything lives at one short path, so the follow-up commands are easy:
+<table>
+<tr valign="top">
+<td width="50%">
 
-```bash
-& "C:\Tools\DiskDetective\Invoke-DiskReclaim.ps1"              # preview - changes nothing
-& "C:\Tools\DiskDetective\Invoke-DiskReclaim.ps1" -Execute     # actually reclaim
-& "C:\Tools\DiskDetective\Install-DiskDetective.ps1"           # schedule it weekly
+**3️⃣ Preview first, then clean**
+
+The first line only *shows* you what it would remove. The second actually does it.
+
+</td>
+<td width="50%">
+
+**3️⃣ Lihat dulu, baru bersihkan**
+
+Baris pertama hanya *menampilkan* apa yang akan dihapus. Baris kedua benar-benar menghapusnya.
+
+</td>
+</tr>
+</table>
+
+```powershell
+& "C:\Tools\DiskDetective\Invoke-DiskReclaim.ps1"              # 👀  preview only  /  lihat saja
+& "C:\Tools\DiskDetective\Invoke-DiskReclaim.ps1" -Execute     # 🧹  clean for real  /  bersihkan beneran
 ```
 
-**macOS / Linux:**
+<table>
+<tr>
+<th width="50%">⚠️ Two things to know</th>
+<th width="50%">⚠️ Dua hal penting</th>
+</tr>
+<tr valign="top">
+<td>
+
+**Close the apps first** — CapCut, Slack, Figma. If they are running, the tool skips them on purpose and you free almost nothing.
+
+**Use the full path** shown above, not `.\Invoke-DiskReclaim.ps1`. Your shell is sitting in `system32`, so the short version fails with *"is not recognized"*.
+
+</td>
+<td>
+
+**Tutup dulu aplikasinya** — CapCut, Slack, Figma. Kalau masih jalan, tool sengaja melewatinya dan hampir tidak ada yang terbebaskan.
+
+**Pakai path lengkap** seperti di atas, bukan `.\Invoke-DiskReclaim.ps1`. Shell kamu ada di `system32`, jadi versi pendek akan gagal dengan pesan *"is not recognized"*.
+
+</td>
+</tr>
+</table>
+
+## 🔁 Keep it clean forever / Biar bersih terus-terusan
+
+One command and it runs by itself every Sunday. / Satu perintah, lalu jalan sendiri tiap hari Minggu.
+
+```powershell
+& "C:\Tools\DiskDetective\Install-DiskDetective.ps1" -DryRunOnly   # 📋  report only first  /  laporan dulu
+& "C:\Tools\DiskDetective\Install-DiskDetective.ps1"               # ✅  auto-clean weekly  /  bersih otomatis
+```
+
+> 💡 Start with `-DryRunOnly` for a few weeks. It writes what it *would* delete to `C:\Tools\DiskDetective\reclaim.log`. Once you agree with it, run the second command.
+> 💡 Mulai dengan `-DryRunOnly` dulu beberapa minggu. Hasilnya dicatat di `C:\Tools\DiskDetective\reclaim.log`. Kalau sudah cocok, jalankan perintah kedua.
+
+## 🍎 macOS / Linux
 
 ```bash
 curl -sL https://github.com/Kusdianta/disk-space-detective/archive/refs/heads/main.tar.gz | tar xz -C /tmp && bash /tmp/disk-space-detective-main/scripts/posix/disk-detective.sh --all
 ```
 
 <details>
-<summary>Prefer git? (same thing)</summary>
+<summary>💡 Prefer git? / Lebih suka pakai git?</summary>
 
-```bash
-Set-ExecutionPolicy Bypass -Scope Process -Force; git clone -q https://github.com/Kusdianta/disk-space-detective "$env:TEMP\dsd"; & "C:\Tools\DiskDetective\Install-DiskDetective.ps1" -NoSchedule; & "C:\Tools\DiskDetective\Start-DiskDetective.ps1"
+```powershell
+Set-ExecutionPolicy Bypass -Scope Process -Force; git clone -q https://github.com/Kusdianta/disk-space-detective "$env:TEMP\dsd"; & "$env:TEMP\dsd\scripts\windows\Install-DiskDetective.ps1" -NoSchedule; & "C:\Tools\DiskDetective\Start-DiskDetective.ps1"
 ```
 </details>
 
-> **Always use the full path** (`C:\Tools\DiskDetective\...`), not `.\Invoke-DiskReclaim.ps1`. These commands run scripts by absolute path, which leaves your shell in `C:\WINDOWS\system32` — a relative path there resolves against system32 and fails with *"is not recognized"*.
+<br>
+
+<div align="center">
+
+## 📖 Everything below is the "why"
+### Skip it unless you're curious / Lewati saja kalau tidak penasaran
+
+</div>
+
+---
+
+**Plain PowerShell and bash scripts. No AI, no account, no network, no install.** They run offline on a stock Windows, macOS, or Linux machine and never phone home.
+
+If you *do* use Claude Code or Claude Desktop, it also works as an [Agent Skill](https://docs.claude.com/en/docs/agents-and-tools/agent-skills/overview) — but that is entirely optional and nothing here depends on it.
+
 
 ### What you get
 
@@ -109,57 +233,26 @@ The POSIX script is the weaker half and I'd rather say so than have you find out
 
 Without it, `C:\Windows\Installer` is unreadable — and that's the most common hidden hoard on Windows (it was **41 GB** in the case that produced this tool). The script tells you it skipped it rather than implying all-clear.
 
-### Then what? — actually reclaiming the space
-
-The scan ends by printing your exact next commands **as full paths**, so you can paste them straight back in. Cleanup is always separate and explicit:
-
-```bash
-& "C:\Tools\DiskDetective\Invoke-DiskReclaim.ps1"
-```
-
-That **previews** what it would remove and changes nothing. Then:
-
-```bash
-& "C:\Tools\DiskDetective\Invoke-DiskReclaim.ps1" -Execute
-```
-
-Or `-Quarantine D:\Held` to *move* files instead of deleting them.
-
-> **Use the full path, not `.\Invoke-DiskReclaim.ps1`.** The quickstart runs the scanner by absolute path, which leaves your shell in `C:\WINDOWS\system32` — a relative path there resolves against system32 and fails with *"is not recognized"*. The scan output gives you the full path; paste that.
+### All commands / Semua perintah
 
 | Command | What it does |
 |---|---|
 | `Start-DiskDetective.ps1` | **Start here.** Read-only, ~25s. Probes the ~25 known accumulators. |
 | `Start-DiskDetective.ps1 -Full` | Exhaustive: ranks every folder + growth-by-month. Minutes, not seconds. |
 | `Invoke-DiskReclaim.ps1` | Cleanup. Dry-run by default; `-Execute` to act. |
-| `Install-DiskDetective.ps1` | Install permanently + schedule it. See below. |
+| `Invoke-DiskReclaim.ps1 -Quarantine D:\Held` | *Move* files instead of deleting them (reversible). |
+| `Install-DiskDetective.ps1` | Install to `C:\Tools\DiskDetective` + schedule weekly. |
+| `Install-DiskDetective.ps1 -Weekday Friday -At 18:00` | Different schedule slot. |
+| `Install-DiskDetective.ps1 -DryRunOnly` | Scheduled runs report only, never delete. |
+| `Install-DiskDetective.ps1 -NoSchedule` | Copy the files, register no task. |
+| `Install-DiskDetective.ps1 -Uninstall` | Remove the scheduled task. |
 
-### Keeping it clean automatically
+Checking on the scheduled task:
 
-The quickstart clones into `%TEMP%`, which Windows eventually wipes — fine for a look, useless for anything recurring. One command installs it somewhere permanent and schedules a weekly cleanup. **Run as Administrator:**
-
-```bash
-& "C:\Tools\DiskDetective\Install-DiskDetective.ps1"
-```
-
-That copies everything to `C:\Tools\DiskDetective`, registers a **weekly Sunday 09:00** task running with the privileges needed to reach `C:\Windows\Installer`, and writes one line per run to `reclaim.log`.
-
-```bash
-& "C:\Tools\DiskDetective\Install-DiskDetective.ps1" -Weekday Friday -At 18:00   # different slot
-& "C:\Tools\DiskDetective\Install-DiskDetective.ps1" -DryRunOnly                 # report only, never deletes
-& "C:\Tools\DiskDetective\Install-DiskDetective.ps1" -NoSchedule                 # install files only
-& "C:\Tools\DiskDetective\Install-DiskDetective.ps1" -Uninstall                  # remove the task
-```
-
-Checking on it:
-
-```bash
+```powershell
 Get-ScheduledTaskInfo -TaskName DiskDetective; Get-Content C:\Tools\DiskDetective\reclaim.log
+Start-ScheduledTask -TaskName DiskDetective     # run now instead of waiting for Sunday
 ```
-
-Run it now rather than waiting for Sunday: `Start-ScheduledTask -TaskName DiskDetective`
-
-> Prefer `-DryRunOnly` for the first couple of weeks if you'd rather read the log before letting it delete anything unattended.
 
 **Using it with Claude Code / Claude Desktop instead?**
 
@@ -170,7 +263,6 @@ git clone https://github.com/Kusdianta/disk-space-detective ~/.claude/skills/dis
 Then just ask: *"my C: drive keeps filling up, find out why"*
 
 ---
-
 ## Why this exists
 
 Disk cleaners only remove what they already know about. This skill is for the other case:
