@@ -210,12 +210,16 @@ function Remove-Set {
             if (-not $covered) { $tops += $d }
         }
 
+        # Count what ACTUALLY disappeared, not what we intended to remove. The old
+        # version counted before deleting and only tallied on a clean return, so a
+        # successful collapse could still report "0 of 28677 processed" while having
+        # freed the space - alarming, and it makes the log untrustworthy.
+        # before-minus-after is also correct when Delete throws part way through.
         foreach ($t in $tops) {
-            try {
-                $n = @([Walker]::Files($t)).Count
-                [System.IO.Directory]::Delete($t, $true)
-                $ok += $n
-            } catch { }
+            $n = @([Walker]::Files($t)).Count
+            try { [System.IO.Directory]::Delete($t, $true) } catch { }
+            $left = if (Test-Path -LiteralPath $t) { @([Walker]::Files($t)).Count } else { 0 }
+            $ok += [Math]::Max(0, $n - $left)
         }
         if ($tops.Count -gt 0) {
             Write-Host ("   collapsed {0} fully-doomed director(ies) into single deletes" -f $tops.Count)
