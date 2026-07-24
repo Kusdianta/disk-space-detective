@@ -34,12 +34,19 @@ param(
 # ============================== CONFIG =====================================
 
 # Uncapped caches. KeepDays = retain anything newer than this many days.
+#
+# Native = a tool's own cache cleaner. ALWAYS prefer it where one exists: it is
+# orders of magnitude faster and the tool knows its own invariants. Deleting an
+# npm cache file-by-file took ~17 minutes for 277,000 files on a real machine;
+# `npm cache clean --force` is effectively instant. Native cleaners purge the
+# WHOLE cache (KeepDays does not apply) - fine for pure churn caches that the
+# tool re-populates on demand, wrong for anything you want partially retained.
 $CacheTargets = @(
     @{ Label='CapCutCache';   Path="$env:LOCALAPPDATA\CapCut\User Data\Cache"; KeepDays=30 }
     @{ Label='ResolveCache';  Path="$env:LOCALAPPDATA\Blackmagic Design\DaVinci Resolve\CacheClip"; KeepDays=30 }
     @{ Label='PlaywrightOld'; Path="$env:LOCALAPPDATA\ms-playwright";          KeepDays=90 }
-    @{ Label='NpmCache';      Path="$env:LOCALAPPDATA\npm-cache";              KeepDays=60 }
-    @{ Label='PipCache';      Path="$env:LOCALAPPDATA\pip\Cache";              KeepDays=60 }
+    @{ Label='NpmCache';      Path="$env:LOCALAPPDATA\npm-cache";              KeepDays=60; Native='npm cache clean --force' }
+    @{ Label='PipCache';      Path="$env:LOCALAPPDATA\pip\Cache";              KeepDays=60; Native='pip cache purge' }
 )
 
 # Apps whose auto-updater retains old app-x.y.z folders.
@@ -143,7 +150,50 @@ function Remove-Set {
     }
 
     $ok = 0
+
+    # FAST PATH: collapse whole directories.
+    # Per-file Remove-Item costs ~4ms; on a 277,000-file npm cache that is ~17 minutes.
+    # Where every file under a directory is doomed, one recursive .NET delete replaces
+    # thousands of calls. Only applies to deletes - quarantine still moves file by file
+    # so the mapping back to original paths stays inspectable.
+    if (-not $dest) {
+        $doomed = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+        foreach ($f in $Files) { [void]$doomed.Add($f.Path) }
+
+        # A directory is fully doomed when nothing inside it survives.
+        $dirs = $Files | ForEach-Object { Split-Path $_.Path -Parent } | Sort-Object -Unique
+        $collapsible = @()
+        foreach ($d in $dirs) {
+            $survivor = $false
+            foreach ($live in [Walker]::Files($d)) {
+                if (-not $doomed.Contains($live.Path)) { $survivor = $true; break }
+            }
+            if (-not $survivor) { $collapsible += $d }
+        }
+
+        # Keep only top-most directories - deleting a parent removes its children.
+        $tops = @()
+        foreach ($d in ($collapsible | Sort-Object Length)) {
+            $covered = $false
+            foreach ($t in $tops) { if ($d.StartsWith($t + '\', [StringComparison]::OrdinalIgnoreCase)) { $covered = $true; break } }
+            if (-not $covered) { $tops += $d }
+        }
+
+        foreach ($t in $tops) {
+            try {
+                $n = @([Walker]::Files($t)).Count
+                [System.IO.Directory]::Delete($t, $true)
+                $ok += $n
+            } catch { }
+        }
+        if ($tops.Count -gt 0) {
+            Write-Host ("   collapsed {0} fully-doomed director(ies) into single deletes" -f $tops.Count)
+        }
+    }
+
+    # Remainder: anything the fast path did not cover.
     foreach ($f in $Files) {
+        if (-not (Test-Path -LiteralPath $f.Path)) { continue }   # already gone via collapse
         try {
             if ($dest) {
                 $leaf = Split-Path $f.Path -Leaf
@@ -212,6 +262,26 @@ if (Want 'Caches') {
         $all = [Walker]::Files($t.Path)
         $totalGB = [math]::Round((($all | Measure-Object Length -Sum).Sum / 1GB), 2)
         $cut = (Get-Date).AddDays(-$t.KeepDays)
+
+        # Native cleaner: whole-cache purge, but seconds instead of many minutes.
+        if ($t.Native -and (Get-Command ($t.Native -split ' ')[0] -ErrorAction SilentlyContinue)) {
+            Write-Host ("   {0} files / {1} GB  ->  native: {2}" -f $all.Count, $totalGB, $t.Native)
+            if (-not $Execute) {
+                Write-Host "   DRY RUN - pass -Execute to act"
+            } else {
+                $before = Get-FreeGB
+                try {
+                    cmd /c "$($t.Native) >nul 2>&1"
+                    $freed = [math]::Round((Get-FreeGB) - $before, 2)
+                    Write-Host ("   done - {0} GB freed" -f $freed)
+                } catch {
+                    Write-Warning ("   native cleaner failed ({0}) - falling back to file-by-file" -f $_.Exception.Message)
+                    Remove-Set -Label $t.Label -Files ($all | Where-Object { $_.MTime -lt $cut }) -FolderTotalGB $totalGB
+                }
+            }
+            continue
+        }
+
         Write-Host ("   {0} files / {1} GB; keeping newer than {2:yyyy-MM-dd}" -f $all.Count, $totalGB, $cut)
         Remove-Set -Label $t.Label -Files ($all | Where-Object { $_.MTime -lt $cut }) -FolderTotalGB $totalGB
     }
