@@ -54,30 +54,47 @@ Also found along the way: 22.4 GB of video-editor cache with nothing newer than 
 
 And one hypothesis **falsified by measurement** — "old Electron app versions piling up" looked obvious and accounted for only 2.27 GB. Ruling a suspect out is a real result.
 
-## Install
+## Quick start
+
+**Windows** — paste this into PowerShell. Clones to a temp folder and runs a read-only scan (~30s). Nothing is deleted:
+
+```bash
+git clone -q https://github.com/Kusdianta/disk-space-detective "$env:TEMP\dsd"; powershell -ExecutionPolicy Bypass -File "$env:TEMP\dsd\scripts\windows\Start-DiskDetective.ps1"
+```
+
+No git on the machine? Same thing via zip:
+
+```bash
+irm https://github.com/Kusdianta/disk-space-detective/archive/refs/heads/main.zip -OutFile "$env:TEMP\dsd.zip"; Expand-Archive "$env:TEMP\dsd.zip" "$env:TEMP\dsd" -Force; powershell -ExecutionPolicy Bypass -File "$env:TEMP\dsd\disk-space-detective-main\scripts\windows\Start-DiskDetective.ps1"
+```
+
+**macOS / Linux:**
+
+```bash
+git clone -q https://github.com/Kusdianta/disk-space-detective /tmp/dsd && bash /tmp/dsd/scripts/posix/disk-detective.sh --all
+```
+
+That's the whole first run. It prints where your space went, what's *accumulating* versus merely large, and the exact command to preview a cleanup.
+
+> **Run it elevated / with sudo for the full picture.** On Windows, `C:\Windows\Installer` — the most common hidden hoard — is unreadable without admin, and the script says so rather than implying a clean result.
+
+### The three commands
+
+| | |
+|---|---|
+| `Start-DiskDetective.ps1` | **Start here.** Read-only diagnosis, ~30s. Probes the ~25 known accumulators. |
+| `Start-DiskDetective.ps1 -Full` | Exhaustive: ranks every folder + growth-by-month. Minutes, not seconds. |
+| `Invoke-DiskReclaim.ps1` | Cleanup. **Dry-run by default** — add `-Execute` to act, `-Quarantine <path>` to move instead of delete. |
+
+Quick mode time-boxes each probe (`-ProbeSeconds`, default 8). A folder that hits the cap is reported as `>= X GB` — a floor, never a falsely-small number.
 
 **As a Claude Code / Claude Desktop skill:**
 
 ```bash
-git clone https://github.com/<you>/disk-space-detective ~/.claude/skills/disk-space-detective
+git clone https://github.com/Kusdianta/disk-space-detective ~/.claude/skills/disk-space-detective
 ```
 
 Then just ask: *"my C: drive keeps filling up, find out why"*
-
-**As standalone scripts** — no agent required:
-
-```powershell
-# Windows
-.\scripts\windows\Get-FolderSize.ps1 -Root C:\
-.\scripts\windows\Find-OrphanedInstallerFiles.ps1
-.\scripts\windows\Invoke-DiskReclaim.ps1              # dry run
-```
-
-```bash
-# macOS / Linux
-chmod +x scripts/posix/disk-detective.sh
-./scripts/posix/disk-detective.sh --all
-```
 
 ## What's in the box
 
