@@ -13,7 +13,7 @@ If you *do* use Claude Code or Claude Desktop, it also works as an [Agent Skill]
 **Windows** — open PowerShell **as Administrator** and paste this. No git needed. It installs to `C:\Tools\DiskDetective` and runs a read-only scan (~30s). **It does not delete anything.**
 
 ```bash
-$z="$env:TEMP\dd.zip";$x="$env:TEMP\ddx";irm https://github.com/Kusdianta/disk-space-detective/archive/refs/heads/main.zip -OutFile $z;Remove-Item $x -Recurse -Force -EA 0;Expand-Archive $z $x -Force;& "$x\disk-space-detective-main\scripts\windows\Install-DiskDetective.ps1" -NoSchedule;& "C:\Tools\DiskDetective\Start-DiskDetective.ps1"
+Set-ExecutionPolicy Bypass -Scope Process -Force; $z="$env:TEMP\dd.zip";$x="$env:TEMP\ddx";irm https://github.com/Kusdianta/disk-space-detective/archive/refs/heads/main.zip -OutFile $z;Remove-Item $x -Recurse -Force -EA 0;Expand-Archive $z $x -Force;& "$x\disk-space-detective-main\scripts\windows\Install-DiskDetective.ps1" -NoSchedule;& "C:\Tools\DiskDetective\Start-DiskDetective.ps1"
 ```
 
 Afterwards everything lives at one short path, so the follow-up commands are easy:
@@ -34,7 +34,7 @@ curl -sL https://github.com/Kusdianta/disk-space-detective/archive/refs/heads/ma
 <summary>Prefer git? (same thing)</summary>
 
 ```bash
-git clone -q https://github.com/Kusdianta/disk-space-detective "$env:TEMP\dsd"; & "$env:TEMP\dsd\scripts\windows\Install-DiskDetective.ps1" -NoSchedule; & "C:\Tools\DiskDetective\Start-DiskDetective.ps1"
+Set-ExecutionPolicy Bypass -Scope Process -Force; git clone -q https://github.com/Kusdianta/disk-space-detective "$env:TEMP\dsd"; & "C:\Tools\DiskDetective\Install-DiskDetective.ps1" -NoSchedule; & "C:\Tools\DiskDetective\Start-DiskDetective.ps1"
 ```
 </details>
 
@@ -114,13 +114,13 @@ Without it, `C:\Windows\Installer` is unreadable — and that's the most common 
 The scan ends by printing your exact next commands **as full paths**, so you can paste them straight back in. Cleanup is always separate and explicit:
 
 ```bash
-& "$env:TEMP\dsd\scripts\windows\Invoke-DiskReclaim.ps1"
+& "C:\Tools\DiskDetective\Invoke-DiskReclaim.ps1"
 ```
 
 That **previews** what it would remove and changes nothing. Then:
 
 ```bash
-& "$env:TEMP\dsd\scripts\windows\Invoke-DiskReclaim.ps1" -Execute
+& "C:\Tools\DiskDetective\Invoke-DiskReclaim.ps1" -Execute
 ```
 
 Or `-Quarantine D:\Held` to *move* files instead of deleting them.
@@ -139,7 +139,7 @@ Or `-Quarantine D:\Held` to *move* files instead of deleting them.
 The quickstart clones into `%TEMP%`, which Windows eventually wipes — fine for a look, useless for anything recurring. One command installs it somewhere permanent and schedules a weekly cleanup. **Run as Administrator:**
 
 ```bash
-& "$env:TEMP\dsd\scripts\windows\Install-DiskDetective.ps1"
+& "C:\Tools\DiskDetective\Install-DiskDetective.ps1"
 ```
 
 That copies everything to `C:\Tools\DiskDetective`, registers a **weekly Sunday 09:00** task running with the privileges needed to reach `C:\Windows\Installer`, and writes one line per run to `reclaim.log`.
