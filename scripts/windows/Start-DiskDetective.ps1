@@ -107,7 +107,8 @@ if (-not $Full) {
     $suspects = @(
         @{ P="$env:LOCALAPPDATA\CapCut\User Data\Cache";        N='CapCut cache';          T='CACHE'   }
         @{ P="$env:LOCALAPPDATA\Blackmagic Design";             N='DaVinci Resolve cache'; T='CACHE'   }
-        @{ P="$env:APPDATA\Adobe\Common\Media Cache Files";     N='Adobe media cache';     T='CACHE'   }
+        @{ P="$env:APPDATA\Adobe\Common\Media Cache Files";     N='Adobe media cache (Pr/AE)'; T='CACHE' }
+        @{ P="$env:APPDATA\Adobe\Common\Peak Files";            N='Adobe audio peaks';     T='CACHE'   }
         @{ P="$env:LOCALAPPDATA\Google\Chrome\User Data";       N='Chrome profile+cache';  T='CACHE'   }
         @{ P="$env:LOCALAPPDATA\Microsoft\Edge\User Data";      N='Edge profile+cache';    T='CACHE'   }
         @{ P="$env:LOCALAPPDATA\npm-cache";                     N='npm cache';             T='CACHE'   }

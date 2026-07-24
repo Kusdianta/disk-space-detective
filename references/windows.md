@@ -106,6 +106,27 @@ Usually 0.3–1 GB each. **Frequently over-blamed** — in the reference case th
 
 Video editors are the usual outliers. Adobe media cache is capped in preferences; **CapCut and DaVinci Resolve are not.**
 
+### 5a. Editor scratch disks & disk caches — two kinds, treat them differently
+
+Creative apps spill in two ways, and only one of them can be cleaned automatically:
+
+**Fixed, shared, safe to auto-clean** — the tool handles these:
+
+| Path | What |
+|---|---|
+| `%APPDATA%\Adobe\Common\Media Cache Files` | Shared by Premiere, After Effects, Media Encoder, Audition. The big one. |
+| `%APPDATA%\Adobe\Common\Media Cache` | The sibling database — rebuilds itself if the files are cleared. |
+| `%APPDATA%\Adobe\Common\Peak Files` | Audio waveform cache. Regenerates. |
+| `Photoshop Temp*` in `%TEMP%` / drive root | Scratch **orphans** left after a Photoshop crash. Cleaned only while Photoshop is closed — a live scratch file *is* the running session. |
+
+**User-configured — the tool cannot find these, and says so instead of guessing:**
+
+- **Photoshop Scratch Disk** — `Edit → Preferences → Scratch Disks`. A live working file on a drive *you* chose. Photoshop normally reclaims it on a clean exit; only crash orphans linger (handled above).
+- **After Effects Disk Cache** — `Edit → Preferences → Media & Disk Cache`. Points at a folder you set; there is no fixed default path to probe. It also has a **"Empty Disk Cache"** button right there.
+- **Blender temp** — `Preferences → File Paths → Temporary Files`. Configurable; defaults to the OS temp.
+
+The honest rule: if an app lets you *choose* where it caches, only that app knows the path. Check the setting — most of these have a one-click "empty cache" button next to it. (Thanks to the Threads commenter who flagged this.)
+
 ---
 
 ## 6. Package manager caches

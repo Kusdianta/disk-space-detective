@@ -42,11 +42,28 @@ param(
 # WHOLE cache (KeepDays does not apply) - fine for pure churn caches that the
 # tool re-populates on demand, wrong for anything you want partially retained.
 $CacheTargets = @(
-    @{ Label='CapCutCache';   Path="$env:LOCALAPPDATA\CapCut\User Data\Cache"; KeepDays=30 }
-    @{ Label='ResolveCache';  Path="$env:LOCALAPPDATA\Blackmagic Design\DaVinci Resolve\CacheClip"; KeepDays=30 }
-    @{ Label='PlaywrightOld'; Path="$env:LOCALAPPDATA\ms-playwright";          KeepDays=90 }
-    @{ Label='NpmCache';      Path="$env:LOCALAPPDATA\npm-cache";              KeepDays=60; Native='npm cache clean --force'; AlsoPurge=@('_npx') }
-    @{ Label='PipCache';      Path="$env:LOCALAPPDATA\pip\Cache";              KeepDays=60; Native='pip cache purge' }
+    @{ Label='CapCutCache';    Path="$env:LOCALAPPDATA\CapCut\User Data\Cache"; KeepDays=30 }
+    @{ Label='ResolveCache';   Path="$env:LOCALAPPDATA\Blackmagic Design\DaVinci Resolve\CacheClip"; KeepDays=30 }
+    # Adobe's SHARED media cache - Premiere, After Effects, Media Encoder and Audition
+    # all pile into this one folder. The scanner already flagged it; until now the
+    # reclaimer could not touch it (the same scanned-but-not-cleanable gap that hid
+    # 36 GB of CapCut). KeepDays=30 so a current project's cache is not wiped - re-
+    # caching footage is slow. (The tiny sibling "Media Cache" DB rebuilds itself.)
+    @{ Label='AdobeMediaCache';Path="$env:APPDATA\Adobe\Common\Media Cache Files"; KeepDays=30 }
+    @{ Label='PlaywrightOld';  Path="$env:LOCALAPPDATA\ms-playwright";          KeepDays=90 }
+    @{ Label='NpmCache';       Path="$env:LOCALAPPDATA\npm-cache";              KeepDays=60; Native='npm cache clean --force'; AlsoPurge=@('_npx') }
+    @{ Label='PipCache';       Path="$env:LOCALAPPDATA\pip\Cache";              KeepDays=60; Native='pip cache purge' }
+)
+
+# Editor scratch files that live at a FIXED, knowable path AND are only safe to
+# remove while the app is closed. Kept separate from CacheTargets because each needs
+# a "is the app running?" guard - deleting a live scratch file corrupts the session.
+# NOTE what is deliberately NOT here: Photoshop's configured Scratch Disk and After
+# Effects' Disk Cache both live at a USER-CHOSEN path the tool cannot read from
+# outside the app. Those are a settings check, not an auto-clean - see references\windows.md.
+$ScratchTargets = @(
+    @{ Label='PhotoshopScratch'; Proc='Photoshop'; Pattern='Photoshop Temp*';
+       Dirs=@("$env:TEMP", 'C:\') }
 )
 
 # Where to hunt for auto-updaters that retain old version folders.
@@ -331,6 +348,27 @@ if (Want 'Caches') {
 
         Write-Host ("   {0} files / {1} GB; keeping newer than {2:yyyy-MM-dd}" -f $all.Count, $totalGB, $cut)
         Remove-Set -Label $t.Label -Files ($all | Where-Object { $_.MTime -lt $cut }) -RawCount $all.Count -Skipped $skipped
+    }
+
+    # Editor scratch orphans. Photoshop cleans up its own scratch on a clean exit but
+    # leaves "Photoshop Temp*" behind after a crash - those can reach tens of GB. Only
+    # ever touched while the app is CLOSED: a live scratch file IS the running session.
+    foreach ($s in $ScratchTargets) {
+        if (Get-Process -Name $s.Proc -ErrorAction SilentlyContinue) {
+            Write-Host ("-- {0}: {1} is running - skipping (its scratch file is live)" -f $s.Label, $s.Proc)
+            continue
+        }
+        $orphans = @()
+        foreach ($dir in $s.Dirs) {
+            if (-not (Test-Path -LiteralPath $dir)) { continue }
+            # Non-recursive on purpose: scratch files sit directly in TEMP or a drive root.
+            $orphans += Get-ChildItem -LiteralPath $dir -Filter $s.Pattern -File -Force -ErrorAction SilentlyContinue |
+                        ForEach-Object { [PSCustomObject]@{ Path=$_.FullName; Length=$_.Length } }
+        }
+        if ($orphans.Count -eq 0) { continue }
+        $gb = [math]::Round((($orphans | Measure-Object Length -Sum).Sum / 1GB), 2)
+        Write-Host ("-- {0}: {1} orphan(s), {2} GB  ({3} closed)" -f $s.Label, $orphans.Count, $gb, $s.Proc)
+        Remove-Set -Label $s.Label -Files $orphans
     }
 }
 
