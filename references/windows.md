@@ -16,7 +16,22 @@ Expected healthy size is 1–5 GB. Anything over 10 GB warrants investigation.
 
 ### Authoritative orphan test
 
-Never judge by filename — the names are opaque hashes. The registry is the authority:
+Never judge by filename — the names are opaque hashes.
+
+**Use the Windows Installer API, not the registry alone.** The API is the only source that exposes each patch's **state**, and that distinction is the entire job:
+
+| State | Meaning | Verdict |
+|---|---|---|
+| `APPLIED` (1) | current patch level | **must keep** |
+| `SUPERSEDED` (2) | replaced by a newer patch | safe to remove ← *the bulk* |
+| `OBSOLETED` (4) | no longer relevant | safe to remove |
+| `REGISTERED` (8) | registered, not applied | keep (conservative) |
+
+Enumerate with `MsiEnumProductsEx` → `MsiGetProductInfoEx(…, "LocalPackage")` and `MsiEnumPatchesEx` → `MsiGetPatchInfoEx(…, "LocalPackage")`. `scripts/windows/_MsiReferenced.ps1` does this via P/Invoke.
+
+> **Do not use the COM object from PowerShell 5.1.** `New-Object -ComObject WindowsInstaller.Installer` works, but `$msi.Products` returns `$null`, `ProductsEx` raises `DISP_E_MEMBERNOTFOUND`, and passing a `BindingFlags` string through a variable silently resolves to the wrong overload. P/Invoke against `msi.dll` has none of these problems.
+
+**The registry is a useful second source, but it has a blind spot that will bite you:**
 
 ```
 HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\<SID>\Products\<Product>\InstallProperties : LocalPackage
@@ -24,11 +39,13 @@ HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\<SID>\Products
 HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\Patches\<Patch>                                     : LocalPackage
 ```
 
-Anything in `C:\Windows\Installer` **not** listed is orphaned. This is the rule PatchCleaner uses. Use `scripts/windows/Find-OrphanedInstallerFiles.ps1`.
+> **Measured on a real machine:** that hive returned **69 cached product `.msi` files and zero `.msp` patches**. Every patch therefore looked orphaned — including 3 in state `APPLIED`. A registry-only pass deleted them (VC++ 2010 x86/x64 redistributables and an Adobe Acrobat patch). Nothing broke immediately, but a future repair/modify/uninstall of those products can prompt for a missing patch source.
 
-> **If the query returns zero referenced packages, ABORT.** That means the hive was unreadable, not that everything is orphaned. Deleting on that basis destroys every installed product's repair/uninstall capability.
+So: **union the two sources into the KEEP set, never intersect them.** Either source can add a file to "still needed"; neither may move one into "removable". A partial failure then degrades toward keeping too much. (Same one-way rule [InstallerClean](https://github.com/no-faff/InstallerClean) uses.)
 
-Requires elevation. Deleting orphans is low-risk; worst case an app's repair flow re-downloads a patch.
+> **If both sources return zero, ABORT** — that means the query failed, not that everything is orphaned. **If the API specifically is unavailable, do not delete at all**: without it you cannot tell an applied patch from a superseded one.
+
+Requires elevation (unelevated, enumerating all users' installs returns `ERROR_ACCESS_DENIED`; the scripts fall back to the current-user scope and say so). Deleting genuinely superseded patches is low-risk; worst case an app's repair flow re-downloads one.
 
 **Identify the vendor** by reading the `.msp` bytes — patch metadata is near the start:
 

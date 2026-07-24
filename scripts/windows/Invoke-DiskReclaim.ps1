@@ -60,6 +60,16 @@ $DumpTargets = @(
 
 $ErrorActionPreference = 'SilentlyContinue'
 
+# Shared Windows Installer detection (COM API + registry union). Fail LOUDLY if it is
+# missing rather than silently falling back to a weaker inline check - a quiet
+# downgrade in the script that DELETES is how you destroy a live package.
+$helper = Join-Path $PSScriptRoot '_MsiReferenced.ps1'
+if (-not (Test-Path $helper)) {
+    Write-Error "Required helper not found: $helper (copy the whole scripts\windows folder, not one file)"
+    exit 3
+}
+. $helper
+
 Add-Type -TypeDefinition @'
 using System;
 using System.Collections.Generic;
@@ -162,31 +172,31 @@ if (Want 'Installer') {
     if (-not (Test-Elevated)) {
         Write-Host "   SKIPPED - needs an elevated session (C:\Windows\Installer is ACL-protected)."
     } else {
-        # Authority is the registry, NEVER the filename.
-        $referenced = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
-        foreach ($sid in (Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData')) {
-            foreach ($prod in (Get-ChildItem "$($sid.PSPath)\Products")) {
-                $ip = Get-ItemProperty "$($prod.PSPath)\InstallProperties"
-                if ($ip.LocalPackage) { [void]$referenced.Add($ip.LocalPackage) }
-                foreach ($pt in (Get-ChildItem "$($prod.PSPath)\Patches")) {
-                    $pp = Get-ItemProperty $pt.PSPath
-                    if ($pp.LocalPackage) { [void]$referenced.Add($pp.LocalPackage) }
-                }
-            }
-        }
-        foreach ($pt in (Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\Patches')) {
-            $pp = Get-ItemProperty $pt.PSPath
-            if ($pp.LocalPackage) { [void]$referenced.Add($pp.LocalPackage) }
+        # Detection is SHARED with Find-OrphanedInstallerFiles.ps1 (see _MsiReferenced.ps1):
+        # Windows Installer COM API unioned with the registry hive. This script is the one
+        # that DELETES, so it must never use weaker detection than the reporter.
+        $ref = Get-MsiReferencedPackages
+
+        Write-Host ("   Installer API {0} / registry {1} -> {2} packages in KEEP set  [scope: {3}]" -f `
+                    $(if ($ref.ApiOk) { "$($ref.ApiCount)" } else { 'n/a' }),
+                    $(if ($ref.RegOk) { "$($ref.RegCount)" } else { 'n/a' }),
+                    $ref.Paths.Count, $ref.Scope)
+
+        if ($ref.ApiOnly.Count -gt 0) {
+            Write-Host ("   {0} package(s) known only to the Installer API - a registry-only tool would delete these" -f $ref.ApiOnly.Count)
         }
 
-        # Zero references means the hive was unreadable, NOT that all are orphaned.
-        # Acting on that would destroy every product's repair/uninstall capability.
-        if ($referenced.Count -eq 0) {
-            Write-Warning "   registry returned 0 referenced packages - REFUSING to classify anything as orphaned"
+        # Without the API we cannot tell an APPLIED patch from a superseded one, and
+        # deleting on registry evidence alone is exactly how live patches get removed.
+        if (-not $ref.ApiOk) {
+            Write-Warning "   Installer API unavailable - refusing to delete on registry evidence alone (cannot see patch state)"
+        }
+        # An empty union means BOTH sources failed, NOT that everything is orphaned.
+        elseif (-not $ref.Trustworthy) {
+            Write-Warning "   0 referenced packages from BOTH sources - REFUSING to classify anything as orphaned"
         } else {
-            Write-Host ("   registry references {0} live packages" -f $referenced.Count)
             $orphans = [Walker]::Files('C:\Windows\Installer') |
-                Where-Object { ($_.Path -match '\.(msi|msp)$') -and (-not $referenced.Contains($_.Path)) }
+                Where-Object { ($_.Path -match '\.(msi|msp)$') -and (-not $ref.Paths.Contains($_.Path)) }
             Remove-Set -Label 'WindowsInstaller' -Files $orphans
         }
     }

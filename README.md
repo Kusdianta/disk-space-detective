@@ -101,7 +101,8 @@ Rules the scripts enforce, each of which exists because ignoring it caused a rea
 
 - **Never delete from a directory a running process is using.** A file lock is the OS telling you it's in use.
 - **Sort versions semantically, never by timestamp.** Timestamps tie and lie. An mtime sort once deleted a *live* application and kept a 2 MB stub. (It was restored byte-exact from the updater's own cached package — that recovery path is documented too.)
-- **Establish "orphaned" from the package database, never the filename.** Query the installer registry / package manager; anything on disk and unreferenced is orphaned.
+- **Establish "orphaned" from the package database, never the filename.** Query the installer API / package manager; anything on disk and unreferenced is orphaned.
+- **A package database can have blind spots — check what your source *cannot* see.** On Windows the registry hive lists cached product `.msi` files but **no `.msp` patches at all**, so a registry-only pass makes every patch look orphaned. It deleted 3 patches that were still in state APPLIED before the Windows Installer API check caught it. `_MsiReferenced.ps1` now unions the API (which knows patch state: applied vs superseded) with the hive, and refuses to delete if the API is unavailable.
 - **If the reference query returns zero, abort.** Zero means the query failed, not that everything is garbage.
 - **Prefer quarantine over delete** when the destination has room. Move, verify for a week, then delete.
 - **Guard against empty enumeration results.** `Get-ChildItem -Recurse` returned 0 files for a real 39,277-file / 22.4 GB directory. A cleanup script that reports "nothing to reclaim" on 22 GB of garbage is worse than no script at all.
@@ -113,6 +114,38 @@ A one-time cleanup is a failure — the ratchet just starts over. The skill fini
 1. A reusable script, dry-run by default
 2. A scheduled job (Task Scheduler / launchd / systemd timer / cron)
 3. A log, one line per run, so unattended runs are auditable
+
+## Related work
+
+This skill is a **diagnostic methodology**, not a better `du`. Where an existing tool is stronger at one step, use it — several are listed here for exactly that reason.
+
+**Analyzers** — all one-shot snapshot tools; none do growth-over-time:
+
+| Project | Notes |
+|---|---|
+| [dust](https://github.com/bootandy/dust) | Rust `du` replacement. Hardlink-dedup and symlink-safe by default, cross-platform. **Faster than these scripts** — good measurement backend. |
+| [gdu](https://github.com/dundee/gdu) | Go TUI. Hardlinks counted once, JSON/SQLite snapshot export. |
+| [WinDirStat](https://github.com/windirstat/windirstat) | Windows-only, revived and active. Hardlink dedup, logical-vs-physical sizing, treemap. |
+| [pdu](https://github.com/KSXGitHub/parallel-disk-usage) | Opt-in hardlink dedup; documents its own blind spots (reflinks on BTRFS/ZFS). |
+| [ncdu](https://dev.yorhel.nl/ncdu) | The POSIX standard. No native Windows. |
+| [duc](https://github.com/zevv/duc) | Indexed DB, scales to 500M+ files. Snapshot diffing is a long-standing TODO. |
+
+**Growth / age analysis** — the closest prior art to this skill's core idea:
+
+- [agedu](https://www.chiark.greenend.org.uk/~sgtatham/agedu/) — Simon Tatham. Same *problem framing* ("`du` tells you what's big, not what's **too** big") but keys on **access** time (staleness), not write-recency. Complementary.
+- [ncdu-compare](https://github.com/yaroslaff/ncdu-compare) — diffs two ncdu snapshots. Requires you to have taken one *beforehand*; this skill's mtime bucketing is retrospective.
+
+**Windows Installer orphans** — this niche is **not** empty:
+
+- **[InstallerClean](https://github.com/no-faff/InstallerClean)** — the serious one. Actively developed, queries the Windows Installer API (`MsiEnumProductsEx`/`MsiEnumPatchesEx`), reads patch supersedence, Recycle-Bin-safe deletes, Task Scheduler support. **If you only want the installer-cache problem solved on Windows, use this rather than these scripts.** Its one-way "registry evidence can only mark a file as *needed*, never *removable*" rule is the pattern `_MsiReferenced.ps1` follows.
+- [PatchCleanerPS](https://github.com/jackharvest/PatchCleanerPS), [PatchCleanerAI](https://github.com/rondilley/PatchCleanerAI), [Windows-Cleanup](https://github.com/Leproide/Windows-Cleanup) — smaller PowerShell/Python takes on the same problem.
+- PatchCleaner (homedev.com.au) — the closed-source original, unmaintained since 2016, excludes Adobe by default.
+
+**Cleaners** — remediation only, no measurement or growth analysis: [BleachBit](https://github.com/bleachbit/bleachbit), [Czkawka](https://github.com/qarmin/czkawka) (duplicates/big-files), [mac-cleanup-py](https://github.com/mac-cleanup/mac-cleanup-py) (~47 per-app macOS cache modules).
+
+**Agent skills** — [gccszs/disk-cleaner](https://github.com/gccszs/disk-cleaner) predates this one: a cross-platform Claude Code skill doing ranked sizing, junk cleanup, dry-run-by-default and scheduling. It does not do growth-by-month bucketing, churn-vs-ratchet classification, or installer-orphan detection.
+
+**What's actually unique here:** retrospective month-by-month growth bucketing from a single scan, the churn-vs-ratchet framing, the documented measurement traps + reconciliation gate, and wiring diagnosis → root cause → scheduled permanent fix into one workflow.
 
 ## License
 

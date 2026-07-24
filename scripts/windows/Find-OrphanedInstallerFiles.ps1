@@ -1,14 +1,14 @@
-﻿# Find-OrphanedInstallerFiles.ps1 - classify C:\Windows\Installer cache as REFERENCED vs ORPHANED
+# Find-OrphanedInstallerFiles.ps1 - classify C:\Windows\Installer cache as REFERENCED vs ORPHANED
 #
 # C:\Windows\Installer holds a cached copy of every .msi and every .msp patch Windows
 # Installer has ever applied. Referenced ones are required for uninstall / repair /
 # future patching. Orphaned ones belong to products that are GONE or to superseded
 # patches, and are pure dead weight - but Windows never removes them.
 #
-# Authority for "referenced" is the registry, NOT the filename:
-#   HKLM\...\Installer\UserData\<SID>\Products\<Product>\InstallProperties : LocalPackage
-#   HKLM\...\Installer\UserData\<SID>\Products\<Product>\Patches\<Patch>   : LocalPackage
-# This is the same rule PatchCleaner uses. Anything on disk and not in that set is orphaned.
+# Authority for "referenced" is the Windows Installer database, NEVER the filename
+# (the names are opaque hashes). Detection lives in _MsiReferenced.ps1 and unions two
+# independent sources - the COM API and the registry hive - so that a failure of
+# either degrades toward keeping too much, never toward deleting something live.
 #
 # READ-ONLY. Prints a report and writes the orphan list to a file. Deletes nothing.
 #
@@ -21,69 +21,76 @@ param(
 
 $ErrorActionPreference = 'SilentlyContinue'
 
-Write-Output 'Collecting REFERENCED packages from the registry...'
-
-$referenced = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
-$refDetail  = @{}
-
-$userDataRoot = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData'
-
-foreach ($sid in (Get-ChildItem $userDataRoot -ErrorAction SilentlyContinue)) {
-    foreach ($product in (Get-ChildItem "$($sid.PSPath)\Products" -ErrorAction SilentlyContinue)) {
-
-        $ip   = Get-ItemProperty "$($product.PSPath)\InstallProperties" -ErrorAction SilentlyContinue
-        $name = $ip.DisplayName
-        if (-not $name) { $name = '(unknown product)' }
-
-        if ($ip.LocalPackage) {
-            [void]$referenced.Add($ip.LocalPackage)
-            $refDetail[$ip.LocalPackage] = "$name (product msi)"
-        }
-
-        foreach ($patch in (Get-ChildItem "$($product.PSPath)\Patches" -ErrorAction SilentlyContinue)) {
-            $pp = Get-ItemProperty $patch.PSPath -ErrorAction SilentlyContinue
-            if ($pp.LocalPackage) {
-                [void]$referenced.Add($pp.LocalPackage)
-                $refDetail[$pp.LocalPackage] = "$name (patch)"
-            }
-        }
-    }
+# Fail LOUDLY if the shared detector is missing rather than silently falling back to
+# a weaker inline check - a quiet downgrade here is how you delete a live package.
+$helper = Join-Path $PSScriptRoot '_MsiReferenced.ps1'
+if (-not (Test-Path $helper)) {
+    Write-Error "Required helper not found: $helper (copy the whole scripts\windows folder, not one file)"
+    exit 3
 }
+. $helper
 
-# Patches also appear under the global Patches hive.
-foreach ($patch in (Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\Patches' -ErrorAction SilentlyContinue)) {
-    $pp = Get-ItemProperty $patch.PSPath -ErrorAction SilentlyContinue
-    if ($pp.LocalPackage) {
-        [void]$referenced.Add($pp.LocalPackage)
-        if (-not $refDetail.ContainsKey($pp.LocalPackage)) { $refDetail[$pp.LocalPackage] = '(global patch hive)' }
-    }
-}
+Write-Output 'Collecting REFERENCED packages (Windows Installer API + registry hive)...'
+$ref = Get-MsiReferencedPackages
 
-Write-Output ("Referenced package paths found in registry: {0}" -f $referenced.Count)
+Write-Output ("   Installer API : {0}   [scope: {1}]" -f `
+              $(if ($ref.ApiOk) { "{0} packages" -f $ref.ApiCount } else { 'UNAVAILABLE' }), $ref.Scope)
+Write-Output ("   Registry hive : {0}" -f $(if ($ref.RegOk) { "{0} packages" -f $ref.RegCount } else { 'UNAVAILABLE' }))
+Write-Output ("   KEEP union    : {0} packages" -f $ref.Paths.Count)
+Write-Output ("   Superseded    : {0} patch(es) - reclaimable, excluded from KEEP" -f $ref.Superseded.Count)
 
-if ($referenced.Count -eq 0) {
+if (-not $ref.ApiOk) {
     Write-Output ''
-    Write-Output '!! Registry returned ZERO referenced packages.'
+    Write-Output '   !! Installer API did not answer - running on registry evidence alone.'
+    Write-Output '   !! That cannot see patch state, so APPLIED patches may look orphaned. Do not delete.'
+}
+
+# The number that matters: packages only the API knew about. Each one is a file a
+# registry-only tool (PatchCleaner, or an earlier version of this script) would have
+# called an orphan and offered to delete.
+if ($ref.ApiOnly.Count -gt 0) {
+    Write-Output ''
+    Write-Output ("   !! {0} package(s) known ONLY to the Installer API - a registry-only tool" -f $ref.ApiOnly.Count)
+    Write-Output '   !! would mis-classify these as orphans:'
+    $ref.ApiOnly | Select-Object -First 10 | ForEach-Object {
+        $tag = if (Test-Path -LiteralPath $_) { 'present' } else { 'ALREADY GONE' }
+        Write-Output ("        [{0,-12}] {1}  {2}" -f $tag, (Split-Path $_ -Leaf), $ref.Detail[$_])
+    }
+}
+if ($ref.RegOnly.Count -gt 0) {
+    Write-Output ''
+    Write-Output ("   ({0} package(s) known only to the registry - kept by the union rule)" -f $ref.RegOnly.Count)
+}
+
+if (-not $ref.Trustworthy) {
+    Write-Output ''
+    Write-Output '!! BOTH sources returned ZERO referenced packages.'
     Write-Output '!! Refusing to classify anything as orphaned - this run is NOT trustworthy.'
-    Write-Output '!! (Usually means the Installer registry hive was unreadable at this privilege level.)'
+    Write-Output '!! (Usually means the Installer database was unreadable at this privilege level.'
+    Write-Output '!!  Re-run from an ELEVATED PowerShell.)'
     exit 2
 }
 
 Write-Output ''
 Write-Output 'Scanning disk...'
 
-$files = Get-ChildItem $InstallerDir -File -Force -Include *.msi, *.msp -ErrorAction SilentlyContinue
+$files = Get-ChildItem $InstallerDir -File -Force -ErrorAction SilentlyContinue |
+    Where-Object { $_.Extension -in '.msi', '.msp' }
+
 if (-not $files) {
-    $files = Get-ChildItem $InstallerDir -File -Force -ErrorAction SilentlyContinue |
-        Where-Object { $_.Extension -in '.msi', '.msp' }
+    Write-Output ''
+    Write-Output ("No .msi/.msp files readable under {0}." -f $InstallerDir)
+    Write-Output '(That directory is ACL-protected - if you are not elevated, this is a'
+    Write-Output ' permissions failure, NOT proof that the cache is clean.)'
+    exit 1
 }
 
-$orphans   = @()
-$keepers   = @()
+$orphans = @()
+$keepers = @()
 
 foreach ($f in $files) {
-    if ($referenced.Contains($f.FullName)) {
-        $keepers += [PSCustomObject]@{ Path = $f.FullName; GB = $f.Length / 1GB; Why = $refDetail[$f.FullName] }
+    if ($ref.Paths.Contains($f.FullName)) {
+        $keepers += [PSCustomObject]@{ Path = $f.FullName; GB = $f.Length / 1GB; Why = $ref.Detail[$f.FullName] }
     } else {
         $orphans += [PSCustomObject]@{ Path = $f.FullName; GB = $f.Length / 1GB; MTime = $f.LastWriteTime }
     }
@@ -94,13 +101,16 @@ $orphanGB = [math]::Round((($orphans | Measure-Object GB -Sum).Sum), 2)
 
 Write-Output ''
 Write-Output '================ RESULT ================'
-Write-Output ("REFERENCED (must keep) : {0,4} files  {1,8:N2} GB" -f $keepers.Count, $keepGB)
+Write-Output ("REFERENCED (must keep)  : {0,4} files  {1,8:N2} GB" -f $keepers.Count, $keepGB)
 Write-Output ("ORPHANED   (reclaimable): {0,4} files  {1,8:N2} GB" -f $orphans.Count, $orphanGB)
 Write-Output '========================================'
-Write-Output ''
-Write-Output 'Largest ORPHANS:'
-$orphans | Sort-Object GB -Descending | Select-Object -First 25 |
-    Format-Table -AutoSize @{n='GB';e={'{0,7:N2}' -f $_.GB}}, @{n='Modified';e={'{0:yyyy-MM-dd}' -f $_.MTime}}, Path
+
+if ($orphans.Count -gt 0) {
+    Write-Output ''
+    Write-Output 'Largest ORPHANS:'
+    $orphans | Sort-Object GB -Descending | Select-Object -First 25 |
+        Format-Table -AutoSize @{n='GB';e={'{0,7:N2}' -f $_.GB}}, @{n='Modified';e={'{0:yyyy-MM-dd}' -f $_.MTime}}, Path
+}
 
 Write-Output ''
 Write-Output 'Largest REFERENCED (these stay):'
