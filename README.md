@@ -101,21 +101,57 @@ The POSIX script is the weaker half and I'd rather say so than have you find out
 
 Without it, `C:\Windows\Installer` is unreadable — and that's the most common hidden hoard on Windows (it was **41 GB** in the case that produced this tool). The script tells you it skipped it rather than implying all-clear.
 
-### Then what?
+### Then what? — actually reclaiming the space
 
-It ends by printing your next command. Cleanup is always a separate, explicit step:
+The scan ends by printing your exact next commands **as full paths**, so you can paste them straight back in. Cleanup is always separate and explicit:
 
 ```bash
-.\Invoke-DiskReclaim.ps1
+& "$env:TEMP\dsd\scripts\windows\Invoke-DiskReclaim.ps1"
 ```
 
-That **previews** what it would remove and changes nothing. Add `-Execute` to actually act, or `-Quarantine D:\Held` to move files instead of deleting them.
+That **previews** what it would remove and changes nothing. Then:
+
+```bash
+& "$env:TEMP\dsd\scripts\windows\Invoke-DiskReclaim.ps1" -Execute
+```
+
+Or `-Quarantine D:\Held` to *move* files instead of deleting them.
+
+> **Use the full path, not `.\Invoke-DiskReclaim.ps1`.** The quickstart runs the scanner by absolute path, which leaves your shell in `C:\WINDOWS\system32` — a relative path there resolves against system32 and fails with *"is not recognized"*. The scan output gives you the full path; paste that.
 
 | Command | What it does |
 |---|---|
 | `Start-DiskDetective.ps1` | **Start here.** Read-only, ~25s. Probes the ~25 known accumulators. |
 | `Start-DiskDetective.ps1 -Full` | Exhaustive: ranks every folder + growth-by-month. Minutes, not seconds. |
-| `Invoke-DiskReclaim.ps1` | Cleanup. Dry-run by default. |
+| `Invoke-DiskReclaim.ps1` | Cleanup. Dry-run by default; `-Execute` to act. |
+| `Install-DiskDetective.ps1` | Install permanently + schedule it. See below. |
+
+### Keeping it clean automatically
+
+The quickstart clones into `%TEMP%`, which Windows eventually wipes — fine for a look, useless for anything recurring. One command installs it somewhere permanent and schedules a weekly cleanup. **Run as Administrator:**
+
+```bash
+& "$env:TEMP\dsd\scripts\windows\Install-DiskDetective.ps1"
+```
+
+That copies everything to `C:\Tools\DiskDetective`, registers a **weekly Sunday 09:00** task running with the privileges needed to reach `C:\Windows\Installer`, and writes one line per run to `reclaim.log`.
+
+```bash
+& "C:\Tools\DiskDetective\Install-DiskDetective.ps1" -Weekday Friday -At 18:00   # different slot
+& "C:\Tools\DiskDetective\Install-DiskDetective.ps1" -DryRunOnly                 # report only, never deletes
+& "C:\Tools\DiskDetective\Install-DiskDetective.ps1" -NoSchedule                 # install files only
+& "C:\Tools\DiskDetective\Install-DiskDetective.ps1" -Uninstall                  # remove the task
+```
+
+Checking on it:
+
+```bash
+Get-ScheduledTaskInfo -TaskName DiskDetective; Get-Content C:\Tools\DiskDetective\reclaim.log
+```
+
+Run it now rather than waiting for Sunday: `Start-ScheduledTask -TaskName DiskDetective`
+
+> Prefer `-DryRunOnly` for the first couple of weeks if you'd rather read the log before letting it delete anything unattended.
 
 **Using it with Claude Code / Claude Desktop instead?**
 

@@ -208,29 +208,65 @@ if (-not $elevated) {
 }
 
 $sw.Stop()
+
+# Emit FULL paths, never ".\something". The quickstart one-liner runs this script by
+# absolute path, which leaves the shell sitting in C:\WINDOWS\system32 - so a relative
+# command printed here resolves against system32 and fails with "not recognized".
+$reclaim = Join-Path $here 'Invoke-DiskReclaim.ps1'
+$selfPath = $PSCommandPath
+$installer = Join-Path $here 'Install-DiskDetective.ps1'
+$inTemp = $here -like "$env:TEMP*"
+
 Write-Host ''
 Rule
 Write-Host (' WHAT TO DO NEXT       (scan took {0:N0}s)' -f $sw.Elapsed.TotalSeconds) -ForegroundColor Green
 Rule
 Write-Host ''
-Write-Host '  Nothing above was deleted. To PREVIEW a cleanup (still safe, no changes):'
+Write-Host '  1) PREVIEW a cleanup - still safe, changes nothing:'
 Write-Host ''
-Write-Host '     .\Invoke-DiskReclaim.ps1' -ForegroundColor Yellow
+Write-Host ("     & `"{0}`"" -f $reclaim) -ForegroundColor Yellow
 Write-Host ''
-Write-Host '  Add -Execute to act, or -Quarantine <path> to move instead of delete.'
+Write-Host '  2) Then actually reclaim the space:'
 Write-Host ''
+Write-Host ("     & `"{0}`" -Execute" -f $reclaim) -ForegroundColor Yellow
+Write-Host ''
+Write-Host '     (or -Quarantine D:\Held to MOVE files instead of deleting them)'
+Write-Host ''
+
 if (-not $Full) {
-    Write-Host '  Nothing obvious above? Rank everything instead (slower):'
+    Write-Host '  Nothing obvious above? Rank every folder instead (slower):'
     Write-Host ''
-    Write-Host '     .\Start-DiskDetective.ps1 -Full' -ForegroundColor Yellow
+    Write-Host ("     & `"{0}`" -Full" -f $selfPath) -ForegroundColor Yellow
     Write-Host ''
 }
 if (-not $elevated) {
-    Write-Host '  Re-run elevated to include the Installer cache:'
+    Write-Host '  Re-run elevated to include the Installer cache (often the big one):'
     Write-Host ''
-    Write-Host ("     Start-Process powershell -Verb RunAs -ArgumentList '-NoExit','-ExecutionPolicy','Bypass','-File','{0}'" -f $PSCommandPath) -ForegroundColor Yellow
+    Write-Host ("     Start-Process powershell -Verb RunAs -ArgumentList '-NoExit','-ExecutionPolicy','Bypass','-File','{0}'" -f $selfPath) -ForegroundColor Yellow
     Write-Host ''
 }
+
+Rule
+Write-Host ' KEEP IT CLEAN AUTOMATICALLY' -ForegroundColor Green
+Rule
+Write-Host ''
+if ($inTemp) {
+    Write-Host '  You are running from a TEMP folder - Windows will delete it eventually.' -ForegroundColor Yellow
+    Write-Host '  Install it somewhere permanent and schedule a weekly cleanup (one command,'
+    Write-Host '  run as Administrator):'
+} else {
+    Write-Host '  Schedule a weekly cleanup so this never builds up again (run as Admin):'
+}
+Write-Host ''
+if (Test-Path $installer) {
+    Write-Host ("     & `"{0}`"" -f $installer) -ForegroundColor Yellow
+    Write-Host ''
+    Write-Host '     Installs to C:\Tools\DiskDetective and registers a weekly task.'
+    Write-Host '     Undo any time with:  -Uninstall'
+} else {
+    Write-Host '     (Install-DiskDetective.ps1 not found next to this script)'
+}
+Write-Host ''
 Write-Host '  Large is not the same as wasted. See references\windows.md for what each'
 Write-Host '  folder is before removing anything.'
 Write-Host ''
