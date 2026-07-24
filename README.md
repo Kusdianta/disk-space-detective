@@ -3,7 +3,6 @@
 # 🔍 Disk Space Detective
 
 ### Find what is **secretly** eating your disk — and stop it coming back
-### Cari tahu apa yang **diam-diam** memakan disk kamu — dan hentikan selamanya
 
 <br>
 
@@ -19,7 +18,7 @@
 
 <br>
 
-**🏆 Real results / Hasil nyata**
+**🏆 Real results**
 
 | | Before | After | Freed |
 |:--|:--:|:--:|:--:|
@@ -30,109 +29,45 @@
 
 ---
 
-# 🚀 How to use — 3 steps / Cara pakai — 3 langkah
+# 🚀 How to use — 3 steps
 
-<table>
-<tr>
-<th width="50%">🇬🇧 English</th>
-<th width="50%">🇮🇩 Bahasa Indonesia</th>
-</tr>
-<tr valign="top">
-<td>
-
-**1️⃣ Open PowerShell as Administrator**
+### 1️⃣ Open PowerShell as Administrator
 
 Press `Win`, type `powershell`, then right-click it and choose **Run as Administrator**.
 
-</td>
-<td>
-
-**1️⃣ Buka PowerShell sebagai Administrator**
-
-Tekan `Win`, ketik `powershell`, lalu klik kanan dan pilih **Run as Administrator**.
-
-</td>
-</tr>
-<tr valign="top">
-<td>
-
-**2️⃣ Copy-paste this. Press Enter.**
+### 2️⃣ Copy-paste this. Press Enter.
 
 It installs itself and scans your disk. **It deletes nothing.** Takes about 30 seconds.
-
-</td>
-<td>
-
-**2️⃣ Copy-paste ini. Tekan Enter.**
-
-Otomatis terpasang lalu memindai disk. **Tidak menghapus apa pun.** Sekitar 30 detik.
-
-</td>
-</tr>
-</table>
 
 ```powershell
 Set-ExecutionPolicy Bypass -Scope Process -Force; $z="$env:TEMP\dd.zip";$x="$env:TEMP\ddx";irm https://github.com/Kusdianta/disk-space-detective/archive/refs/heads/main.zip -OutFile $z;Remove-Item $x -Recurse -Force -EA 0;Expand-Archive $z $x -Force;& "$x\disk-space-detective-main\scripts\windows\Install-DiskDetective.ps1" -NoSchedule;& "C:\Tools\DiskDetective\Start-DiskDetective.ps1"
 ```
 
-<table>
-<tr valign="top">
-<td width="50%">
-
-**3️⃣ Preview first, then clean**
+### 3️⃣ Preview first, then clean
 
 The first line only *shows* you what it would remove. The second actually does it.
 
-</td>
-<td width="50%">
-
-**3️⃣ Lihat dulu, baru bersihkan**
-
-Baris pertama hanya *menampilkan* apa yang akan dihapus. Baris kedua benar-benar menghapusnya.
-
-</td>
-</tr>
-</table>
-
 ```powershell
-& "C:\Tools\DiskDetective\Invoke-DiskReclaim.ps1"              # 👀  preview only  /  lihat saja
-& "C:\Tools\DiskDetective\Invoke-DiskReclaim.ps1" -Execute     # 🧹  clean for real  /  bersihkan beneran
+& "C:\Tools\DiskDetective\Invoke-DiskReclaim.ps1"              # 👀  preview only
+& "C:\Tools\DiskDetective\Invoke-DiskReclaim.ps1" -Execute     # 🧹  clean for real
 ```
 
-<table>
-<tr>
-<th width="50%">⚠️ Two things to know</th>
-<th width="50%">⚠️ Dua hal penting</th>
-</tr>
-<tr valign="top">
-<td>
+> ### ⚠️ Two things to know
+>
+> **Close the apps first** — CapCut, Slack, Figma. If they are running, the tool skips them on purpose and you free almost nothing.
+>
+> **Use the full path** shown above, not `.\Invoke-DiskReclaim.ps1`. Your shell is sitting in `system32`, so the short version fails with *"is not recognized"*.
 
-**Close the apps first** — CapCut, Slack, Figma. If they are running, the tool skips them on purpose and you free almost nothing.
+## 🔁 Keep it clean forever
 
-**Use the full path** shown above, not `.\Invoke-DiskReclaim.ps1`. Your shell is sitting in `system32`, so the short version fails with *"is not recognized"*.
-
-</td>
-<td>
-
-**Tutup dulu aplikasinya** — CapCut, Slack, Figma. Kalau masih jalan, tool sengaja melewatinya dan hampir tidak ada yang terbebaskan.
-
-**Pakai path lengkap** seperti di atas, bukan `.\Invoke-DiskReclaim.ps1`. Shell kamu ada di `system32`, jadi versi pendek akan gagal dengan pesan *"is not recognized"*.
-
-</td>
-</tr>
-</table>
-
-## 🔁 Keep it clean forever / Biar bersih terus-terusan
-
-One command and it runs by itself every Sunday. / Satu perintah, lalu jalan sendiri tiap hari Minggu.
+One command and it runs by itself every Sunday.
 
 ```powershell
-& "C:\Tools\DiskDetective\Install-DiskDetective.ps1" -DryRunOnly   # 📋  report only first  /  laporan dulu
-& "C:\Tools\DiskDetective\Install-DiskDetective.ps1"               # ✅  auto-clean weekly  /  bersih otomatis
+& "C:\Tools\DiskDetective\Install-DiskDetective.ps1" -DryRunOnly   # 📋  report only first
+& "C:\Tools\DiskDetective\Install-DiskDetective.ps1"               # ✅  auto-clean weekly
 ```
 
 > 💡 Start with `-DryRunOnly` for a few weeks. It writes what it *would* delete to `C:\Tools\DiskDetective\reclaim.log`. Once you agree with it, run the second command.
-> 💡 Mulai dengan `-DryRunOnly` dulu beberapa minggu. Hasilnya dicatat di `C:\Tools\DiskDetective\reclaim.log`. Kalau sudah cocok, jalankan perintah kedua.
 
 ## 🍎 macOS / Linux
 
@@ -141,7 +76,7 @@ curl -sL https://github.com/Kusdianta/disk-space-detective/archive/refs/heads/ma
 ```
 
 <details>
-<summary>💡 Prefer git? / Lebih suka pakai git?</summary>
+<summary>💡 Prefer git?</summary>
 
 ```powershell
 Set-ExecutionPolicy Bypass -Scope Process -Force; git clone -q https://github.com/Kusdianta/disk-space-detective "$env:TEMP\dsd"; & "$env:TEMP\dsd\scripts\windows\Install-DiskDetective.ps1" -NoSchedule; & "C:\Tools\DiskDetective\Start-DiskDetective.ps1"
@@ -153,7 +88,7 @@ Set-ExecutionPolicy Bypass -Scope Process -Force; git clone -q https://github.co
 <div align="center">
 
 ## 📖 Everything below is the "why"
-### Skip it unless you're curious / Lewati saja kalau tidak penasaran
+### Skip it unless you're curious
 
 </div>
 
@@ -233,7 +168,7 @@ The POSIX script is the weaker half and I'd rather say so than have you find out
 
 Without it, `C:\Windows\Installer` is unreadable — and that's the most common hidden hoard on Windows (it was **41 GB** in the case that produced this tool). The script tells you it skipped it rather than implying all-clear.
 
-### All commands / Semua perintah
+### All commands
 
 | Command | What it does |
 |---|---|
