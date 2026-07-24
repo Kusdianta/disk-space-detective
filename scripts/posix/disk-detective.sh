@@ -27,6 +27,16 @@ fi
 human() { awk 'function h(b){s="B KB MB GB TB";split(s,a," ");i=1;while(b>=1024&&i<5){b/=1024;i++}return sprintf("%.2f %s",b,a[i])} {print h($1)}' <<<"$1"; }
 hr() { printf '%*s\n' "${COLUMNS:-72}" '' | tr ' ' '-'; }
 
+# Version sort, newest first. `sort -V` is GNU; BSD/macOS sort does not have it and
+# would fall back to LEXICAL order, where "app-1.0.9" sorts ABOVE "app-1.0.10" - i.e.
+# it would name the wrong version as newest and mark the live one stale. Detected at
+# runtime, with a numeric-field fallback rather than a silent wrong answer.
+if printf '1.0.10\n1.0.9\n' | sort -V >/dev/null 2>&1; then
+    VSORT_DESC() { sort -Vr; }
+else
+    VSORT_DESC() { sort -t. -k1,1nr -k2,2nr -k3,3nr -k4,4nr; }
+fi
+
 # ----------------------------------------------------------------------- scan
 do_scan() {
     local root="${1:-/}"
@@ -75,10 +85,24 @@ do_growth() {
     echo "(caveat: files rewritten in place - VM disks, DBs - always show current month)"
     echo
 
-    # -P never follows symlinks. Print "YYYY-MM<TAB>size" then aggregate.
+    # PORTABILITY: this used to pipe find into `xargs -0 -r stat $(...)` and format
+    # the month with awk's strftime(). Every part of that was wrong somewhere:
+    #   * BSD/macOS xargs has no -r          -> hard error on macOS
+    #   * the unquoted $(...) word-split into "-c%Y" and "%s", so %s became a filename
+    #   * strftime() is a GNU awk extension  -> BSD awk (macOS default) silently
+    #                                           produces NOTHING, the worst outcome
+    # perl does stat + month formatting + size in one step and ships on macOS and
+    # essentially every Linux, so it is the portable choice here.
+    if ! command -v perl >/dev/null 2>&1; then
+        echo "  perl not found - growth-by-month needs it (ships with macOS and most Linux)."
+        echo "  Install perl, or use the Windows scripts which do not depend on it."
+        return 1
+    fi
+
     find -P "$root" -type f -print0 2>/dev/null \
-    | xargs -0 -r stat $( stat -c '%Y' . >/dev/null 2>&1 && echo "-c%Y %s" || echo "-f%m %z" ) 2>/dev/null \
-    | awk '{ if (NF>=2) { print strftime("%Y-%m",$1) "\t" $2 } }' \
+    | perl -0ne 'my @s = stat($_); next unless @s;
+                 my @t = localtime($s[9]);
+                 printf("%04d-%02d\t%d\n", $t[5]+1900, $t[4]+1, $s[7]);' 2>/dev/null \
     | awk -F'\t' '{sum[$1]+=$2} END{for(m in sum) printf "%s\t%d\n", m, sum[m]}' \
     | sort -r | head -18 | while IFS=$'\t' read -r month bytes; do
         printf '  %s  %12s\n' "$month" "$(human "$bytes")"
@@ -105,7 +129,7 @@ do_versions() {
             # timestamps tie, and a tie once deleted a LIVE application.
             find -P "$parent" -maxdepth 1 -type d 2>/dev/null \
             | grep -E '/(app-)?v?[0-9]+\.[0-9]+(\.[0-9]+)*$' \
-            | sort -Vr | while read -r v; do
+            | VSORT_DESC | while read -r v; do
                 sz=$(du -sk "$v" 2>/dev/null | cut -f1)
                 printf '        %-40s %10s\n' "$(basename "$v")" "$(human $((sz*1024)))"
             done

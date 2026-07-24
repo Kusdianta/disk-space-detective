@@ -60,6 +60,40 @@ Every folder is labelled so you know what you're looking at:
 
 `>=` means the probe hit its time cap — that folder is *at least* that big. A floor, never a falsely-small number.
 
+### Requirements
+
+**Windows** — everything needed ships with the OS. Nothing to install:
+
+| | |
+|---|---|
+| OS | Windows 10 or 11 (Server 2016+ should work, untested) |
+| PowerShell | **5.1** — preinstalled on Win10/11. No install, no upgrade. |
+| .NET | Framework 4.x — preinstalled. Used for fast directory walking. |
+| Admin | Needed **only** for the `C:\Windows\Installer` section |
+| git | Optional — use the zip one-liner above instead |
+
+**macOS / Linux:**
+
+| | |
+|---|---|
+| Shell | `bash` (macOS ships 3.2; that's fine) |
+| Tools | `find`, `du`, `df`, `awk`, `sort`, `perl` — all standard on both |
+| `sudo` | Needed to scan outside your home directory |
+| Optional | `lsof` (finds deleted-but-open files), `tmutil` / `btrfs` / `zfs` (snapshots) |
+
+### Tested on
+
+Being straight about this, since you may be running it somewhere I haven't:
+
+| Platform | Status |
+|---|---|
+| **Windows 11 + PowerShell 5.1** | ✅ Extensively — this is where the tool was built and the 65 GB case was solved |
+| Windows 10 + PowerShell 5.1 | ⚠️ Expected to work, not verified |
+| PowerShell 7 (`pwsh`) | ⚠️ Untested. Nothing in the scripts is 5.1-only, but unverified. |
+| **macOS / Linux** | ⚠️ Detectors verified individually; **never run end-to-end on real macOS or Linux hardware** |
+
+The POSIX script is the weaker half and I'd rather say so than have you find out. It was written against the documented behaviour of BSD and GNU userland, and testing turned up three real portability bugs that a syntax check happily passed — `xargs -r` (absent on BSD), an unquoted `stat` format that word-split, and `awk strftime()` which is gawk-only and produced *silently empty output* on BSD awk. All three are fixed and the detectors verified, but treat a first run on macOS as a shakedown. The Windows path is the mature one.
+
 ### ⚠ Run it as Administrator / with sudo
 
 Without it, `C:\Windows\Installer` is unreadable — and that's the most common hidden hoard on Windows (it was **41 GB** in the case that produced this tool). The script tells you it skipped it rather than implying all-clear.
