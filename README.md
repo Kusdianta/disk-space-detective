@@ -1,8 +1,10 @@
 # Disk Space Detective
 
-An [Agent Skill](https://docs.claude.com/en/docs/agents-and-tools/agent-skills/overview) that finds what is **silently** filling a disk, proves it by measurement, and installs a permanent fix.
+Finds what is **silently** filling a disk, proves it by measurement, and installs a permanent fix.
 
-Works on **Windows, macOS, and Linux**.
+**Plain PowerShell and bash scripts. No AI, no account, no network, no install.** They run offline on a stock Windows, macOS, or Linux machine and never phone home.
+
+If you *do* use Claude Code or Claude Desktop, it also works as an [Agent Skill](https://docs.claude.com/en/docs/agents-and-tools/agent-skills/overview) — but that is entirely optional and nothing here depends on it.
 
 ---
 
@@ -71,6 +73,7 @@ Every folder is labelled so you know what you're looking at:
 | .NET | Framework 4.x — preinstalled. Used for fast directory walking. |
 | Admin | Needed **only** for the `C:\Windows\Installer` section |
 | git | Optional — use the zip one-liner above instead |
+| AI / network | **Not required.** No API key, no account, no internet. Runs fully offline. |
 
 **macOS / Linux:**
 
