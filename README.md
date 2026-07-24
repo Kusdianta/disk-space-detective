@@ -10,27 +10,35 @@ If you *do* use Claude Code or Claude Desktop, it also works as an [Agent Skill]
 
 # ▶ Run it
 
-One paste. Read-only — **it does not delete anything**. Takes about 25 seconds.
-
-**Windows** (PowerShell):
+**Windows** — open PowerShell **as Administrator** and paste this. No git needed. It installs to `C:\Tools\DiskDetective` and runs a read-only scan (~30s). **It does not delete anything.**
 
 ```bash
-git clone -q https://github.com/Kusdianta/disk-space-detective "$env:TEMP\dsd"; powershell -ExecutionPolicy Bypass -File "$env:TEMP\dsd\scripts\windows\Start-DiskDetective.ps1"
+$z="$env:TEMP\dd.zip";$x="$env:TEMP\ddx";irm https://github.com/Kusdianta/disk-space-detective/archive/refs/heads/main.zip -OutFile $z;Remove-Item $x -Recurse -Force -EA 0;Expand-Archive $z $x -Force;& "$x\disk-space-detective-main\scripts\windows\Install-DiskDetective.ps1" -NoSchedule;& "C:\Tools\DiskDetective\Start-DiskDetective.ps1"
+```
+
+Afterwards everything lives at one short path, so the follow-up commands are easy:
+
+```bash
+& "C:\Tools\DiskDetective\Invoke-DiskReclaim.ps1"              # preview - changes nothing
+& "C:\Tools\DiskDetective\Invoke-DiskReclaim.ps1" -Execute     # actually reclaim
+& "C:\Tools\DiskDetective\Install-DiskDetective.ps1"           # schedule it weekly
 ```
 
 **macOS / Linux:**
 
 ```bash
-git clone -q https://github.com/Kusdianta/disk-space-detective /tmp/dsd && bash /tmp/dsd/scripts/posix/disk-detective.sh --all
+curl -sL https://github.com/Kusdianta/disk-space-detective/archive/refs/heads/main.tar.gz | tar xz -C /tmp && bash /tmp/disk-space-detective-main/scripts/posix/disk-detective.sh --all
 ```
 
 <details>
-<summary>No git installed? (Windows zip version)</summary>
+<summary>Prefer git? (same thing)</summary>
 
 ```bash
-irm https://github.com/Kusdianta/disk-space-detective/archive/refs/heads/main.zip -OutFile "$env:TEMP\dsd.zip"; Expand-Archive "$env:TEMP\dsd.zip" "$env:TEMP\dsd" -Force; powershell -ExecutionPolicy Bypass -File "$env:TEMP\dsd\disk-space-detective-main\scripts\windows\Start-DiskDetective.ps1"
+git clone -q https://github.com/Kusdianta/disk-space-detective "$env:TEMP\dsd"; & "$env:TEMP\dsd\scripts\windows\Install-DiskDetective.ps1" -NoSchedule; & "C:\Tools\DiskDetective\Start-DiskDetective.ps1"
 ```
 </details>
+
+> **Always use the full path** (`C:\Tools\DiskDetective\...`), not `.\Invoke-DiskReclaim.ps1`. These commands run scripts by absolute path, which leaves your shell in `C:\WINDOWS\system32` — a relative path there resolves against system32 and fails with *"is not recognized"*.
 
 ### What you get
 

@@ -49,13 +49,24 @@ $CacheTargets = @(
     @{ Label='PipCache';      Path="$env:LOCALAPPDATA\pip\Cache";              KeepDays=60; Native='pip cache purge' }
 )
 
-# Apps whose auto-updater retains old app-x.y.z folders.
-$VersionParents = @(
-    "$env:LOCALAPPDATA\slack"
-    "$env:LOCALAPPDATA\Discord"
-    "$env:LOCALAPPDATA\Figma"
-    "$env:LOCALAPPDATA\Notion"
+# Where to hunt for auto-updaters that retain old version folders.
+#
+# This used to be a hardcoded list of four apps (slack/Discord/Figma/Notion). On a
+# real machine the DETECTOR found 36.6 GB of stale CapCut versions - 23 of them,
+# C:\Users\<you>\AppData\Local\CapCut\Apps\8.7.0.3685 and friends - and the
+# RECLAIMER ignored every one, because CapCut was not on the list. A cleanup tool
+# that cannot act on what its own scanner reports is worse than useless.
+#
+# Now it discovers them: any folder holding 2+ version-named subdirectories is a
+# candidate. Safety does not come from the whitelist, it comes from the guards -
+# keep the highest SEMANTIC version, never touch one with a running process, and
+# dry-run by default.
+$VersionScanRoots = @(
+    "$env:LOCALAPPDATA"
+    "$env:APPDATA"
 )
+$VersionScanDepth = 3        # how deep under each root to look for version parents
+$VersionMinGB     = 0.05     # ignore trivially small version stacks
 
 # Crash dumps / error reports.
 $DumpTargets = @(
@@ -331,31 +342,61 @@ if (Want 'VersionFolders') {
     }
     $runningDirs = $runningDirs | Sort-Object -Unique
 
+    # Discover every parent holding 2+ version-named subdirs. Matches bare versions
+    # (CapCut "8.7.0.3685", Blender "4.4") as well as the Squirrel "app-1.2.3" form -
+    # the old code only matched app-*, which is why CapCut's 36 GB slipped through.
+    $verRx = '^(app-|v|V|Update-|release-)?\d+\.\d+(\.\d+)*([-.+][A-Za-z0-9.]+)?$'
+    $parents = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+
+    foreach ($root in $VersionScanRoots) {
+        if (-not (Test-Path $root)) { continue }
+        $cur = @($root)
+        for ($d = 0; $d -lt $VersionScanDepth -and $cur.Count -gt 0; $d++) {
+            $next = @()
+            foreach ($dir in $cur) {
+                foreach ($sub in (Get-ChildItem -LiteralPath $dir -Directory -Force -ErrorAction SilentlyContinue)) {
+                    if ($sub.Attributes -band [IO.FileAttributes]::ReparsePoint) { continue }
+                    if ($sub.Name -match $verRx) { [void]$parents.Add($dir) } else { $next += $sub.FullName }
+                }
+            }
+            $cur = $next
+        }
+    }
+
     $stale = @()
-    foreach ($p in $VersionParents) {
+    foreach ($p in $parents) {
         if (-not (Test-Path $p)) { continue }
-        $vers = Get-ChildItem $p -Directory -Force | Where-Object { $_.Name -match '^app-\d' }
+        $vers = Get-ChildItem $p -Directory -Force | Where-Object { $_.Name -match $verRx }
         if ($vers.Count -lt 2) { continue }
 
         # Sort by SEMANTIC VERSION, never LastWriteTime. Timestamps tie, and a tie
         # once deleted the LIVE application while keeping a 2 MB stub.
+        # Strip EVERY prefix the regex accepts - stripping only "app-" left "v1.2.3"
+        # and "Update-1.2.3" unparseable, so those stacks were silently skipped.
         $ranked = $vers | ForEach-Object {
             $v = $null
-            [void][version]::TryParse(($_.Name -replace '^app-',''), [ref]$v)
+            [void][version]::TryParse(($_.Name -replace '^(app-|v|V|Update-|release-)',''), [ref]$v)
             [PSCustomObject]@{ Dir=$_; Ver=$v }
         } | Where-Object { $_.Ver } | Sort-Object Ver -Descending
 
         if ($ranked.Count -lt 2) { continue }
-        Write-Host ("   {0}: keeping {1}" -f (Split-Path $p -Leaf), $ranked[0].Dir.Name)
 
+        $parentStale = @()
         foreach ($old in ($ranked | Select-Object -Skip 1)) {
             # Hard guard: a running process means IN USE, whatever the version says.
             if ($runningDirs | Where-Object { $_ -like ($old.Dir.FullName + '*') }) {
-                Write-Host ("   {0}: IN USE by a running process - skipping" -f $old.Dir.Name)
+                Write-Host ("   {0}\{1}: IN USE by a running process - skipping" -f (Split-Path $p -Leaf), $old.Dir.Name)
                 continue
             }
-            $stale += [Walker]::Files($old.Dir.FullName)
+            $parentStale += [Walker]::Files($old.Dir.FullName)
         }
+
+        $pGB = [math]::Round((($parentStale | Measure-Object Length -Sum).Sum / 1GB), 2)
+        if ($pGB -lt $VersionMinGB) { continue }
+
+        Write-Host ("   {0,-28} keep {1,-16} prune {2,2} older = {3} GB" -f `
+                    (Split-Path $p -Leaf), $ranked[0].Dir.Name, ($ranked.Count-1), $pGB)
+        $stale += $parentStale
     }
     Remove-Set -Label 'OldAppVersions' -Files $stale
 }
