@@ -40,7 +40,7 @@ Press `Win`, type `powershell`, then right-click it and choose **Run as Administ
 It installs itself and scans your disk. **It deletes nothing.** Takes about 30 seconds.
 
 ```powershell
-Set-ExecutionPolicy Bypass -Scope Process -Force; $z="$env:TEMP\dd.zip";$x="$env:TEMP\ddx";irm https://github.com/Kusdianta/disk-space-detective/archive/refs/heads/main.zip -OutFile $z;Remove-Item $x -Recurse -Force -EA 0;Expand-Archive $z $x -Force;& "$x\disk-space-detective-main\scripts\windows\Install-DiskDetective.ps1" -NoSchedule;& "C:\Tools\DiskDetective\Start-DiskDetective.ps1"
+Set-ExecutionPolicy Bypass -Scope Process -Force; $z="$env:TEMP\dd.zip";$x="$env:TEMP\ddx";irm https://github.com/Kusdianta/disk-space-detective/releases/latest/download/disk-space-detective.zip -OutFile $z;Remove-Item $x -Recurse -Force -EA 0;Expand-Archive $z $x -Force;& "$x\scripts\windows\Install-DiskDetective.ps1" -NoSchedule;& "C:\Tools\DiskDetective\Start-DiskDetective.ps1"
 ```
 
 ### 3️⃣ Preview first, then clean
@@ -72,7 +72,7 @@ One command and it runs by itself every Sunday.
 ## 🍎 macOS / Linux
 
 ```bash
-curl -sL https://github.com/Kusdianta/disk-space-detective/archive/refs/heads/main.tar.gz | tar xz -C /tmp && bash /tmp/disk-space-detective-main/scripts/posix/disk-detective.sh --all
+mkdir -p /tmp/dsd && curl -sL https://github.com/Kusdianta/disk-space-detective/releases/latest/download/disk-space-detective.tar.gz | tar xz -C /tmp/dsd && bash /tmp/dsd/scripts/posix/disk-detective.sh --all
 ```
 
 <details>
