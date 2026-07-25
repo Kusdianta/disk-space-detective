@@ -72,7 +72,7 @@ One command and it runs by itself every Sunday.
 ## 🍎 macOS / Linux
 
 ```bash
-mkdir -p /tmp/dsd && curl -sL https://github.com/Kusdianta/disk-space-detective/releases/latest/download/disk-space-detective.tar.gz | tar xz -C /tmp/dsd && bash /tmp/dsd/scripts/posix/disk-detective.sh --all
+mkdir -p /tmp/dsd && curl -sL https://github.com/Kusdianta/disk-space-detective/releases/latest/download/disk-space-detective.tar.gz | tar xz -C /tmp/dsd && bash /tmp/dsd/scripts/bash/disk-detective.sh --all
 ```
 
 <details>
@@ -146,7 +146,7 @@ Every folder is labelled so you know what you're looking at:
 
 | | |
 |---|---|
-| Shell | `bash` (macOS ships 3.2; that's fine) |
+| Shell | **`bash`** (macOS ships 3.2 - fine). Not POSIX `sh`: the script uses herestrings and `local`, so it needs bash, not dash/ash. |
 | Tools | `find`, `du`, `df`, `awk`, `sort`, `perl` — all standard on both |
 | `sudo` | Needed to scan outside your home directory |
 | Optional | `lsof` (finds deleted-but-open files), `tmutil` / `btrfs` / `zfs` (snapshots) |
@@ -162,7 +162,7 @@ Being straight about this, since you may be running it somewhere I haven't:
 | PowerShell 7 (`pwsh`) | ⚠️ Untested. Nothing in the scripts is 5.1-only, but unverified. |
 | **macOS / Linux** | ⚠️ Detectors verified individually; **never run end-to-end on real macOS or Linux hardware** |
 
-The POSIX script is the weaker half and I'd rather say so than have you find out. It was written against the documented behaviour of BSD and GNU userland, and testing turned up three real portability bugs that a syntax check happily passed — `xargs -r` (absent on BSD), an unquoted `stat` format that word-split, and `awk strftime()` which is gawk-only and produced *silently empty output* on BSD awk. All three are fixed and the detectors verified, but treat a first run on macOS as a shakedown. The Windows path is the mature one.
+The bash script is the weaker half and I'd rather say so than have you find out. It was written against the documented behaviour of BSD and GNU userland, and testing turned up three real portability bugs that a syntax check happily passed — `xargs -r` (absent on BSD), an unquoted `stat` format that word-split, and `awk strftime()` which is gawk-only and produced *silently empty output* on BSD awk. All three are fixed and the detectors verified, but treat a first run on macOS as a shakedown. The Windows path is the mature one.
 
 ### ⚠ Run it as Administrator / with sudo
 
@@ -257,7 +257,7 @@ references/
   linux.md                     journald, pacman cache, snaps, deleted-but-open
 scripts/
   windows/*.ps1                sizing, growth-by-month, version + orphan detection, reclaim
-  posix/disk-detective.sh      the same detectors for macOS and Linux
+  bash/disk-detective.sh      the same detectors for macOS and Linux
 ```
 
 ## Safety

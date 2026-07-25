@@ -134,7 +134,7 @@ Read the one matching the user's OS. Each lists the high-yield accumulators, the
 ## Scripts
 
 - `scripts/windows/` — PowerShell 5.1-compatible sizing, growth-by-month, version-folder and orphaned-package detection, plus a reclaim script
-- `scripts/posix/disk-detective.sh` — the same detectors for macOS and Linux
+- `scripts/bash/disk-detective.sh` — the same detectors for macOS and Linux
 
 All scripts are **read-only by default**. Only the reclaim scripts modify anything, and only with an explicit `-Execute` / `--execute` flag.
 

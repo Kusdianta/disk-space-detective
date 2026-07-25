@@ -10,6 +10,11 @@
 #
 # READ-ONLY. This script never deletes anything.
 #
+# REQUIRES BASH - not POSIX sh. It uses herestrings (<<<) and `local`, neither of
+# which is in the POSIX spec, so it will not run under dash/ash. This lived in a
+# folder called posix/ until someone rightly pointed out that name overclaimed.
+# macOS (bash 3.2) and mainstream Linux are fine; *BSD would need bash installed.
+#
 # Portability: works with BSD (macOS) and GNU (Linux) userland. Differences in
 # stat/find/du are detected at runtime rather than assumed.
 
