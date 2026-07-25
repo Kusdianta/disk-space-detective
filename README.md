@@ -72,7 +72,7 @@ One command and it runs by itself every Sunday.
 ## 🍎 macOS / Linux
 
 ```bash
-mkdir -p /tmp/dsd && curl -sL https://github.com/Kusdianta/disk-space-detective/releases/latest/download/disk-space-detective.tar.gz | tar xz -C /tmp/dsd && bash /tmp/dsd/scripts/bash/disk-detective.sh --all
+mkdir -p /tmp/dsd && curl -sL https://github.com/Kusdianta/disk-space-detective/releases/latest/download/disk-space-detective.tar.gz | tar xz -C /tmp/dsd && bash "$(find /tmp/dsd -name disk-detective.sh)" --all
 ```
 
 <details>
