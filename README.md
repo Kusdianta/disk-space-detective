@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🔍 Disk Space Detective
+# 🕵🏻‍♂️ Disk Space Detective
 
 ### Find what is **secretly** eating your disk — and stop it coming back
 
