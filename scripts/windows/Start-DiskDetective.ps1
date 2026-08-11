@@ -86,7 +86,18 @@ public class QuickSize {
 Rule
 Write-Host ' DISK SPACE DETECTIVE - read-only diagnosis' -ForegroundColor Green
 Rule
-$d = Get-PSDrive ($Drive.TrimEnd(':\'))
+# Validate the drive BEFORE reporting on it. Passing a letter that is not mounted
+# used to sail straight through and print "0 GB of 0 GB (0% free) - CRITICAL", which
+# is an alarming and completely fabricated verdict about a drive that is not there.
+$driveLetter = $Drive.TrimEnd(':\')
+$d = Get-PSDrive $driveLetter -ErrorAction SilentlyContinue
+if (-not $d -or -not (Test-Path -LiteralPath $Drive)) {
+    Write-Host ''
+    Write-Warning ("Drive '{0}' is not mounted or not readable." -f $Drive)
+    Write-Host ('  Available: ' + ((Get-PSDrive -PSProvider FileSystem | ForEach-Object { $_.Name + ':' }) -join '  '))
+    Write-Host ''
+    exit 1
+}
 $freeGB  = [math]::Round($d.Free/1GB,2)
 $totalGB = [math]::Round(($d.Used+$d.Free)/1GB,2)
 $pct     = if ($totalGB -gt 0) { [math]::Round($freeGB/$totalGB*100,1) } else { 0 }
@@ -182,20 +193,44 @@ if (-not $Full) {
 
 } else {
 # ======================================================================== FULL
-    Head ("1. RANKED SIZES - top level of $Drive")
-    Write-Host 'Walking every file. This is the slow part; a few minutes is normal.'
+# THREE separate full walks run back to back here, and each one is silent while it
+# works. On a 475 GB drive with ~1.2M files that measured 35+ MINUTES with no output
+# at all - indistinguishable from a hang, and worse, a stray click puts the console
+# into QuickEdit "Select" mode which freezes the display and makes it look dead.
+# Quick mode was fixed for exactly this and -Full was not, because -Full was never
+# actually run end to end before shipping. Each phase now announces itself, reports
+# its own elapsed time, and the header states a realistic expectation up front.
+
+    $usedGB = [math]::Round($d.Used/1GB, 0)
+    Write-Host ''
+    Write-Host ('  FULL scan of {0} GB. Expect roughly {1}-{2} minutes TOTAL across 3 phases.' -f `
+                $usedGB, [math]::Max(2,[int]($usedGB/25)), [math]::Max(5,[int]($usedGB/8))) -ForegroundColor Yellow
+    Write-Host '  Each phase is silent while it walks - that is normal, it is not stuck.'
+    Write-Host '  DO NOT click inside this window: that triggers QuickEdit and freezes'
+    Write-Host '  the output (title changes to "Select ..."). Press Esc if it happens.'
+
+    $ph = [System.Diagnostics.Stopwatch]::StartNew()
+
+    Head ("1/3  RANKED SIZES - top level of $Drive")
+    Write-Host 'Walking every file on the drive. This is the slowest phase.'
     Write-Host ''
     & (Join-Path $here 'Get-FolderSize.ps1') -Root $Drive -Top $Top
+    Write-Host ('  [phase 1/3 done in {0:N0}s]' -f $ph.Elapsed.TotalSeconds) -ForegroundColor DarkGray
+    $ph.Restart()
 
-    Head '2. WHAT IS ACCUMULATING (bytes on disk, by month last written)'
+    Head '2/3  WHAT IS ACCUMULATING (bytes on disk, by month last written)'
     Write-Host 'Similar GB month after month = a RATCHET. Large files rewritten in place'
     Write-Host '(VM disks, databases) always show the current month - not real growth.'
+    Write-Host 'Re-walking your profile now.'
     Write-Host ''
     & (Join-Path $here 'Get-GrowthByMonth.ps1') -Root $env:USERPROFILE -Depth 3 -Months 8 -MinGB $MinGB
+    Write-Host ('  [phase 2/3 done in {0:N0}s]' -f $ph.Elapsed.TotalSeconds) -ForegroundColor DarkGray
+    $ph.Restart()
 
-    Head '3. RETAINED OLD APP VERSIONS'
+    Head '3/3  RETAINED OLD APP VERSIONS'
     & (Join-Path $here 'Find-VersionFolders.ps1') `
         -Roots "$env:LOCALAPPDATA","$env:APPDATA","$env:ProgramFiles","${env:ProgramFiles(x86)}" -MaxDepth 4
+    Write-Host ('  [phase 3/3 done in {0:N0}s]' -f $ph.Elapsed.TotalSeconds) -ForegroundColor DarkGray
 }
 
 # ------------------------------------------------------- installer (both modes)

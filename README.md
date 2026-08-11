@@ -173,7 +173,7 @@ Without it, `C:\Windows\Installer` is unreadable — and that's the most common 
 | Command | What it does |
 |---|---|
 | `Start-DiskDetective.ps1` | **Start here.** Read-only, ~25s. Probes the ~25 known accumulators. |
-| `Start-DiskDetective.ps1 -Full` | Exhaustive: ranks every folder + growth-by-month. Minutes, not seconds. |
+| `Start-DiskDetective.ps1 -Full` | Exhaustive: ranks every folder + growth-by-month + version stacks. **Three full walks - measured at 40+ minutes on a 433 GB drive.** Use only when quick mode finds nothing. |
 | `Invoke-DiskReclaim.ps1` | Cleanup. Dry-run by default; `-Execute` to act. |
 | `Invoke-DiskReclaim.ps1 -Quarantine D:\Held` | *Move* files instead of deleting them (reversible). |
 | `Install-DiskDetective.ps1` | Install to `C:\Tools\DiskDetective` + schedule weekly. |

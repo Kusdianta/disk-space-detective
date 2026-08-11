@@ -188,6 +188,14 @@ function Remove-Set {
 
     $gb = [math]::Round((($Files | Measure-Object Length -Sum).Sum / 1GB), 2)
     Write-Host ("   {0} items, {1} GB" -f $Files.Count, $gb)
+
+    # Accumulate what a dry run WOULD reclaim. Without this the log line is useless in
+    # -DryRunOnly mode: nothing is deleted, so before/after are identical and reclaimed
+    # is always 0 - i.e. the one number you need in order to decide whether to trust it
+    # unattended was the one number the log did not record.
+    $script:WouldReclaimGB += $gb
+    $script:WouldReclaimN  += $Files.Count
+
     if (-not $Execute) { Write-Host "   DRY RUN - pass -Execute to act"; return }
 
     $dest = $null
@@ -261,6 +269,9 @@ function Remove-Set {
     }
     Write-Host ("   {0} of {1} processed{2}" -f $ok, $Files.Count, $(if ($dest) { " -> $dest" } else { " (deleted)" }))
 }
+
+$script:WouldReclaimGB = 0.0   # what a DRY RUN would have removed (see Remove-Set)
+$script:WouldReclaimN  = 0
 
 $before = Get-FreeGB
 Write-Host ""
@@ -467,8 +478,17 @@ Write-Host "======================================="
 
 # One line per run so unattended scheduled runs stay auditable.
 try {
-    $line = '{0}  {1,-7}  before={2,8} GB  after={3,8} GB  reclaimed={4,7} GB  scope={5}' -f `
-            (Get-Date -Format 'yyyy-MM-dd HH:mm'), $(if($Execute){'EXECUTE'}else{'DRYRUN'}),
-            $before, $after, $delta, $(if ($Only) { $Only -join '+' } else { 'all' })
+    # In EXECUTE the meaningful number is what was actually freed (drive delta). In
+    # DRYRUN nothing moves, so report what WOULD be reclaimed instead - otherwise the
+    # line reads "reclaimed 0 GB" and tells the operator nothing they can act on.
+    $scope = $(if ($Only) { $Only -join '+' } else { 'all' })
+    $line = if ($Execute) {
+        '{0}  EXECUTE  before={1,8} GB  after={2,8} GB  reclaimed={3,7} GB  scope={4}' -f `
+            (Get-Date -Format 'yyyy-MM-dd HH:mm'), $before, $after, $delta, $scope
+    } else {
+        '{0}  DRYRUN   free={1,8} GB  WOULD reclaim {2,7} GB in {3} item(s)  scope={4}' -f `
+            (Get-Date -Format 'yyyy-MM-dd HH:mm'), $before,
+            [math]::Round($script:WouldReclaimGB,2), $script:WouldReclaimN, $scope
+    }
     Add-Content -Path (Join-Path $PSScriptRoot 'reclaim.log') -Value $line -Encoding ASCII
 } catch { }
