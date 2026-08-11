@@ -21,6 +21,35 @@ public class FolderSizer
     public static long DeniedCount = 0;
     public static long FileCount   = 0;
 
+    // LIVE PROGRESS. Walking a 400 GB drive takes tens of minutes and used to print
+    // absolutely nothing until it finished, which is indistinguishable from a hang -
+    // especially since a stray click puts the Windows console into QuickEdit and
+    // freezes the display too. A heartbeat with MOVING NUMBERS is the only thing that
+    // proves the process is alive, so it is emitted from inside the walk itself.
+    //
+    // Written with \r to overwrite one status line rather than scrolling, and skipped
+    // entirely when output is redirected (a file or a pipe would otherwise fill with
+    // thousands of carriage-return fragments).
+    static long _lastReport = 0;
+    const long REPORT_EVERY = 20000;   // files
+
+    static void Beat(long total, string dir)
+    {
+        if (Console.IsOutputRedirected) { return; }
+        string tail = dir ?? "";
+        if (tail.Length > 48) { tail = "..." + tail.Substring(tail.Length - 45); }
+        string line = String.Format("   scanning  {0,12:N0} files  {1,8:N1} GB   {2}",
+                                    FileCount, total / 1073741824.0, tail);
+        if (line.Length > 110) { line = line.Substring(0, 110); }
+        Console.Write("\r" + line.PadRight(112));
+    }
+
+    public static void EndBeat()
+    {
+        if (Console.IsOutputRedirected) { return; }
+        Console.Write("\r" + "".PadRight(112) + "\r");
+    }
+
     // Walk a directory tree iteratively. Reparse points are never descended into,
     // which is what stops junctions (C:\Users\All Users -> C:\ProgramData) from
     // being counted twice.
@@ -45,6 +74,7 @@ public class FolderSizer
                         if ((fi.Attributes & FileAttributes.ReparsePoint) != 0) { continue; }
                         total += fi.Length;
                         FileCount++;
+                        if (FileCount - _lastReport >= REPORT_EVERY) { _lastReport = FileCount; Beat(total, dir); }
                     }
                     catch { DeniedCount++; }
                 }
@@ -103,7 +133,10 @@ try {
     exit 1
 }
 
-foreach ($d in $dirs) {
+$dirList = @($dirs)
+$n = 0
+foreach ($d in $dirList) {
+    $n++
     $di = $null
     try { $di = New-Object System.IO.DirectoryInfo $d } catch { continue }
 
@@ -115,8 +148,14 @@ foreach ($d in $dirs) {
         continue
     }
 
+    # Per-directory line so there is visible progress even between heartbeats, and so
+    # a single enormous directory is identifiable as the one currently being chewed on.
+    Write-Host ("  [{0}/{1}] {2}" -f $n, $dirList.Count, $di.Name)
+
     [FolderSizer]::Reset()
     $bytes = [FolderSizer]::SizeOf($d)
+    [FolderSizer]::EndBeat()   # wipe the heartbeat line before the next Write-Host
+
     $rows += [PSCustomObject]@{
         Path   = $di.FullName
         GB     = [math]::Round($bytes / 1GB, 2)

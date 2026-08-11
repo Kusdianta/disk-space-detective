@@ -28,6 +28,30 @@ public class GrowthScanner2
     public static Dictionary<string, long> Buckets     = new Dictionary<string, long>();
     public static Dictionary<string, long> MonthTotals = new Dictionary<string, long>();
 
+    // LIVE PROGRESS - same reasoning as Get-FolderSize: this walks an entire user
+    // profile (over a million files) and printed nothing until it finished, which is
+    // indistinguishable from a hang. Skipped when output is redirected so a piped or
+    // captured run does not fill with carriage-return fragments.
+    public static long FileCount = 0;
+    static long _lastReport = 0;
+    const long REPORT_EVERY = 20000;
+
+    static void Beat(string dir)
+    {
+        if (Console.IsOutputRedirected) { return; }
+        string tail = dir ?? "";
+        if (tail.Length > 48) { tail = "..." + tail.Substring(tail.Length - 45); }
+        string line = String.Format("   bucketing {0,12:N0} files   {1}", FileCount, tail);
+        if (line.Length > 110) { line = line.Substring(0, 110); }
+        Console.Write("\r" + line.PadRight(112));
+    }
+
+    public static void EndBeat()
+    {
+        if (Console.IsOutputRedirected) { return; }
+        Console.Write("\r" + "".PadRight(112) + "\r");
+    }
+
     public static void Scan(string root, int depth)
     {
         int rootLen = root.TrimEnd('\\').Length;
@@ -46,6 +70,9 @@ public class GrowthScanner2
                     {
                         var fi = new FileInfo(f);
                         if ((fi.Attributes & FileAttributes.ReparsePoint) != 0) { continue; }
+
+                        FileCount++;
+                        if (FileCount - _lastReport >= REPORT_EVERY) { _lastReport = FileCount; Beat(dir); }
 
                         string rel = fi.DirectoryName;
                         if (rel.Length > rootLen) { rel = rel.Substring(rootLen).TrimStart('\\'); }
@@ -92,6 +119,7 @@ public class GrowthScanner2
 '@
 
 [GrowthScanner2]::Scan($Root, $Depth)
+[GrowthScanner2]::EndBeat()
 
 Write-Output "=== BYTES STILL ON DISK, BY MONTH LAST WRITTEN - under $Root ==="
 Write-Output ''
