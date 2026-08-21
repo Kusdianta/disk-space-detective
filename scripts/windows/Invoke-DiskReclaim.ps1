@@ -53,6 +53,12 @@ $CacheTargets = @(
     @{ Label='PlaywrightOld';  Path="$env:LOCALAPPDATA\ms-playwright";          KeepDays=90 }
     @{ Label='NpmCache';       Path="$env:LOCALAPPDATA\npm-cache";              KeepDays=60; Native='npm cache clean --force'; AlsoPurge=@('_npx') }
     @{ Label='PipCache';       Path="$env:LOCALAPPDATA\pip\Cache";              KeepDays=60; Native='pip cache purge' }
+    # TEMP was scanned but never cleanable - the third time a folder appeared in the
+    # report with no way to act on it. KeepDays is deliberately short but non-zero:
+    # anything currently in use is by definition recent, so an age filter is what
+    # keeps this from yanking a file out from under a running program.
+    @{ Label='ClaudeTemp';     Path="$env:TEMP\claude";                        KeepDays=7 }
+    @{ Label='UserTemp';       Path="$env:TEMP";                               KeepDays=14 }
 )
 
 # Editor scratch files that live at a FIXED, knowable path AND are only safe to
@@ -161,6 +167,46 @@ function Test-Elevated {
     ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
     ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
+
+function Remove-DeepDirectory {
+    <#
+    .SYNOPSIS
+    Delete a directory tree that ordinary APIs cannot, because its paths exceed MAX_PATH.
+
+    .DESCRIPTION
+    Measured on a real machine: a scratch folder had 7,988 entries longer than 260
+    characters and a deepest path of 32,694 - 183 levels of "subdir\loop" left behind
+    by a symlink-cycle test that materialised REAL directories instead of links.
+    File Explorer crashed on it and du hung outright.
+
+    Honest scope: on Win10/11 Remove-Item DID delete a 2,445-char test tree, so this
+    is a fallback, not the primary mechanism - it only runs when the normal delete
+    leaves the directory behind. The failure it guards against is the silent one:
+    reporting a directory as removed while it is still sitting on disk.
+
+    robocopy is the reliable way out: mirroring an EMPTY directory over the target
+    deletes everything inside it, and robocopy speaks long paths natively. Exit codes
+    0-7 are success (8+ are real failures) - 2 simply means "extra files removed",
+    which is exactly what a mirror-to-empty is supposed to report.
+    #>
+    param([Parameter(Mandatory)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) { return $true }
+
+    $empty = Join-Path $env:TEMP ('_dd_empty_' + [guid]::NewGuid().ToString('N').Substring(0,8))
+    try {
+        New-Item -ItemType Directory -Force -Path $empty | Out-Null
+        $null = robocopy $empty $Path /MIR /NFL /NDL /NJH /NJS /R:1 /W:1 2>&1
+        if ($LASTEXITCODE -ge 8) { Write-Warning ("   robocopy failed ({0}) on {1}" -f $LASTEXITCODE, $Path); return $false }
+        Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue
+        return (-not (Test-Path -LiteralPath $Path))
+    } catch {
+        Write-Warning ("   deep delete failed on {0}: {1}" -f $Path, $_.Exception.Message)
+        return $false
+    } finally {
+        Remove-Item -LiteralPath $empty -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
 function Get-FreeGB { [math]::Round((Get-PSDrive C).Free / 1GB, 2) }
 function Want($n) { return (-not $Only) -or ($Only -contains $n) }
 
@@ -243,6 +289,10 @@ function Remove-Set {
         foreach ($t in $tops) {
             $n = @([Walker]::Files($t)).Count
             try { [System.IO.Directory]::Delete($t, $true) } catch { }
+            # .NET Delete fails on anything past MAX_PATH and leaves the tree behind.
+            # Fall back to robocopy, which handles long paths, rather than silently
+            # reporting success on a directory that is still sitting there.
+            if (Test-Path -LiteralPath $t) { [void](Remove-DeepDirectory -Path $t) }
             $left = if (Test-Path -LiteralPath $t) { @([Walker]::Files($t)).Count } else { 0 }
             $ok += [Math]::Max(0, $n - $left)
         }
