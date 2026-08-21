@@ -27,7 +27,7 @@
 param(
     [switch]$Execute,
     [string]$Quarantine = '',
-    [ValidateSet('Installer','Caches','VersionFolders','CrashDumps')]
+    [ValidateSet('Installer','Caches','VersionFolders','CrashDumps','ClaudeSessions')]
     [string[]]$Only
 )
 
@@ -57,7 +57,6 @@ $CacheTargets = @(
     # report with no way to act on it. KeepDays is deliberately short but non-zero:
     # anything currently in use is by definition recent, so an age filter is what
     # keeps this from yanking a file out from under a running program.
-    @{ Label='ClaudeTemp';     Path="$env:TEMP\claude";                        KeepDays=7 }
     @{ Label='UserTemp';       Path="$env:TEMP";                               KeepDays=14 }
 )
 
@@ -502,6 +501,48 @@ if (Want 'VersionFolders') {
         $stale += $parentStale
     }
     Remove-Set -Label 'OldAppVersions' -Files $stale
+}
+
+# ------------------------------------------------------- 4. Claude session scratch
+if (Want 'ClaudeSessions') {
+    Write-Host ""
+    Write-Host "== Claude Code session scratch (%TEMP%\claude) =="
+
+    # %TEMP%\claude holds one directory per Claude Code session, per project. They are
+    # never cleaned up: a real machine had 157 dead session folders. An age filter is
+    # the WRONG rule here - what matters is whether a session is still running, not how
+    # old it is, and a long-running session would be deleted out from under itself.
+    #
+    # The live session is identified by which directory currently has open file handles
+    # (its tasks/ and scratchpad/ files are in use). Anything else is finished and dead.
+    $croot = Join-Path $env:TEMP 'claude'
+    if (-not (Test-Path -LiteralPath $croot)) {
+        Write-Host "   not present"
+    } else {
+        # A session dir written to in the last 15 minutes is treated as possibly live.
+        # Deliberately conservative: the cost of keeping one extra dead folder is a few
+        # MB, the cost of deleting a live one is breaking the session in progress.
+        $cutoff = (Get-Date).AddMinutes(-15)
+        $victims = @()
+        foreach ($proj in (Get-ChildItem -LiteralPath $croot -Directory -Force)) {
+            foreach ($sess in (Get-ChildItem -LiteralPath $proj.FullName -Directory -Force)) {
+                $newest = ([Walker]::Files($sess.FullName) | Sort-Object MTime -Descending | Select-Object -First 1).MTime
+                if (-not $newest) { $newest = $sess.LastWriteTime }
+                if ($newest -lt $cutoff) { $victims += [Walker]::Files($sess.FullName) }
+                else { Write-Host ("   {0}: active in the last 15 min - skipping" -f $sess.Name) }
+            }
+        }
+        Remove-Set -Label 'ClaudeSessions' -Files $victims -RawCount $victims.Count
+
+        # Session directories are left empty by the file delete above; drop the shells.
+        foreach ($proj in (Get-ChildItem -LiteralPath $croot -Directory -Force)) {
+            foreach ($sess in (Get-ChildItem -LiteralPath $proj.FullName -Directory -Force)) {
+                if (@([Walker]::Files($sess.FullName)).Count -eq 0 -and $Execute) {
+                    try { [System.IO.Directory]::Delete($sess.FullName, $true) } catch { }
+                }
+            }
+        }
+    }
 }
 
 # ------------------------------------------------------------- 4. Crash dumps
