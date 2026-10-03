@@ -106,6 +106,8 @@ Usually 0.3–1 GB each. **Frequently over-blamed** — in the reference case th
 
 Video editors are the usual outliers. Adobe media cache is capped in preferences; **CapCut and DaVinci Resolve are not.**
 
+**DaVinci Resolve's cache is not in AppData.** It goes to the project's *Cache files location*, which defaults to the first *Media Storage* location — on Windows usually `%USERPROFILE%\Videos\CacheClip` (one folder per project UUID, `.dvcc` render cache plus `.raw`/`.pfl` audio waveforms). So it shows up inside **Videos** and looks like footage. In the reference case `Videos` measured 29.7 GB, of which 21 GB was `CacheClip` untouched for 30+ days and only ~8 GB was actual video. Check for `CacheClip` before proposing to move "the Videos folder". Leave `ProxyMedia` (derived, but projects link to it), `.gallery` (grading stills) and `Resolve Project Backups` to a human.
+
 ### 5a. Editor scratch disks & disk caches — two kinds, treat them differently
 
 Creative apps spill in two ways, and only one of them can be cleaned automatically:

@@ -43,7 +43,14 @@ param(
 # tool re-populates on demand, wrong for anything you want partially retained.
 $CacheTargets = @(
     @{ Label='CapCutCache';    Path="$env:LOCALAPPDATA\CapCut\User Data\Cache"; KeepDays=30 }
-    @{ Label='ResolveCache';   Path="$env:LOCALAPPDATA\Blackmagic Design\DaVinci Resolve\CacheClip"; KeepDays=30 }
+    # DaVinci Resolve writes its render cache to the project's "Cache files location",
+    # which defaults to the FIRST Media Storage location - on Windows usually the
+    # user's Videos folder. This target used to list only the AppData path below, which
+    # on a real machine did not exist, while Videos\CacheClip held 21 GB of .dvcc cache
+    # untouched for 30+ days. Both are listed; a missing path is skipped. If you moved
+    # Media Storage to another drive, add that drive's CacheClip here.
+    @{ Label='ResolveCache';   Path="$env:USERPROFILE\Videos\CacheClip";       KeepDays=30 }
+    @{ Label='ResolveCacheAD'; Path="$env:LOCALAPPDATA\Blackmagic Design\DaVinci Resolve\CacheClip"; KeepDays=30 }
     # Adobe's SHARED media cache - Premiere, After Effects, Media Encoder and Audition
     # all pile into this one folder. The scanner already flagged it; until now the
     # reclaimer could not touch it (the same scanned-but-not-cleanable gap that hid
